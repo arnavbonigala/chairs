@@ -75,12 +75,6 @@ Stage::Stage(Meadow& m, const Routine& s) : meadow(m), script(s) {
         b.yaw = std::atan2(std::sin(p.angle), -std::cos(p.angle));
         players.push_back(p);
     }
-    confetti.floor = 0.01f;
-    confetti.drag = 1.6f;
-    sparks.additive = true;
-    sparks.round = true;
-    sparks.drag = 1.2f;
-    sparks.floor = 0.0f;
 }
 
 void Stage::dash(Player& p) {
@@ -142,60 +136,12 @@ void Stage::sit(Player& p, int chair) {
     b.gazeSet = false;
 }
 
-void Stage::celebrate(const Vec3& at) {
-    ParticleBurst c;
-    c.position = at + Vec3{0, 1.6f, 0};
-    c.velocity = Vec3{0, 1, 0};
-    c.speed = 7.0f;
-    c.spread = 0.9f;
-    c.count = 1600;
-    c.life = 5.0f;
-    c.size = 0.05f;
-    c.spin = 12.0f;
-    c.colorCount = 4;
-    c.colors[0] = Vec3{0.95f, 0.3f, 0.35f};
-    c.colors[1] = Vec3{0.3f, 0.75f, 0.95f};
-    c.colors[2] = Vec3{1.0f, 0.82f, 0.25f};
-    c.colors[3] = Vec3{0.45f, 0.9f, 0.5f};
-    confetti.burst(c, random_);
-    ParticleBurst s;
-    s.position = c.position;
-    s.velocity = Vec3{0, 1, 0};
-    s.speed = 6.0f;
-    s.spread = 1.3f;
-    s.count = 300;
-    s.life = 1.0f;
-    s.size = 0.045f;
-    s.spin = 0.0f;
-    s.glow = 6.0f;
-    s.colors[0] = Vec3{1.0f, 0.7f, 0.3f};
-    sparks.burst(s, random_);
-}
+void Stage::celebrate(const Vec3& at) { fx.celebrate(at); }
 
 void Stage::launch(Player& p) {
-    Bean& b = bean(p);
     p.state = Player::Launch;
     p.timer = 0.0f;
-    const Vec3 out = normalize(flat(meadow.beanPosition(b)) + Vec3{0.01f, 0, 0});
-    b.flying = true;
-    b.velocity = out * 5.5f + Vec3{0, 16.0f, 0} + Vec3{-out.z, 0, out.x} * 1.5f;
-    b.spinAxis = normalize(Vec3{-out.z, 0.3f, out.x});
-    b.spinRate = 15.0f;
-    b.gazeSet = true;
-    b.gaze[0] = 0.0f;
-    b.gaze[1] = 0.25f;
-    ParticleBurst dust;
-    dust.position = meadow.beanPosition(b) + Vec3{0, 0.2f, 0};
-    dust.velocity = Vec3{0, 1, 0};
-    dust.speed = 5.0f;
-    dust.spread = 2.5f;
-    dust.count = 400;
-    dust.life = 0.9f;
-    dust.size = 0.07f;
-    dust.spin = 0.0f;
-    dust.glow = 5.0f;
-    dust.colors[0] = Vec3{1.0f, 0.85f, 0.55f};
-    sparks.burst(dust, random_);
+    fx.launch(meadow, bean(p));
 }
 
 void Stage::update(float dt) {
@@ -272,32 +218,7 @@ void Stage::update(float dt) {
             }
             case Player::Launch: {
                 p.timer += dt;
-                ParticleBurst trail;
-                trail.position = meadow.beanPosition(b) + Vec3{0, 0.75f, 0};
-                trail.speed = 0.6f;
-                trail.spread = 3.0f;
-                trail.count = 6;
-                trail.life = 0.9f;
-                trail.size = 0.08f;
-                trail.spin = 0.0f;
-                trail.glow = 7.0f;
-                trail.colors[0] = Vec3{1.0f, 0.9f, 0.5f};
-                sparks.burst(trail, random_);
-                if (meadow.beanPosition(b).y > 34.0f) {
-                    p.state = Player::Gone;
-                    ParticleBurst star;
-                    star.position = meadow.beanPosition(b);
-                    star.speed = 9.0f;
-                    star.spread = 3.0f;
-                    star.count = 500;
-                    star.life = 1.0f;
-                    star.size = 0.35f;
-                    star.spin = 0.0f;
-                    star.glow = 12.0f;
-                    star.colors[0] = Vec3{1.0f, 0.95f, 0.7f};
-                    sparks.burst(star, random_);
-                    meadow.hide(b);
-                }
+                if (fx.fly(meadow, b)) p.state = Player::Gone;
                 break;
             }
             case Player::Gone:
@@ -338,17 +259,7 @@ void Stage::update(float dt) {
         }
         if (!seats.empty() && !seats[0].removing && time >= script.clearAt + 1.2f) {
             seats[0].removing = true;
-            ParticleBurst puff;
-            puff.position = seats[0].position + Vec3{0, 0.6f, 0};
-            puff.speed = 3.0f;
-            puff.spread = 3.0f;
-            puff.count = 250;
-            puff.life = 0.7f;
-            puff.size = 0.06f;
-            puff.spin = 0.0f;
-            puff.glow = 4.0f;
-            puff.colors[0] = Vec3{1.0f, 0.9f, 0.7f};
-            sparks.burst(puff, random_);
+            fx.puff(seats[0].position + Vec3{0, 0.6f, 0}, Vec3{1.0f, 0.9f, 0.7f}, 250, 3.0f, 0.06f);
         }
     }
     for (Seat& seat : seats) {
@@ -360,8 +271,7 @@ void Stage::update(float dt) {
         if (seat.scale <= 0.0f) meadow.scene.world.get<Renderable>(seat.entity).visible = 0;
     }
 
-    confetti.update(dt);
-    sparks.update(dt);
+    fx.update(dt);
     meadow.update(dt);
 }
 

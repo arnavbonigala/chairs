@@ -15,6 +15,13 @@ character from one video to the next. Names float above their heads and fade out
 when another bean blocks the view. Standing in formation, they breathe, glance
 around and do the odd hop in place.
 
+The game is classic musical chairs with contact. Beans walk the ring while the
+music plays, and it stops at a random moment with no warning. Then it is a
+scramble: one chair short, and anyone who is not fully seated can be shoved off.
+A bean locks in after sitting still for a moment. Whoever is left standing gets
+launched into the sky. The game runs on real physics at 240 Hz and is
+deterministic, so the same seed always plays out the same way.
+
 ## Build
 
 Expects a Skein checkout next to this one, or pass `-DSKEIN_DIR=/path/to/skein`.
@@ -41,6 +48,19 @@ cmake --build build -j
 | `--angle`, `--pitch`, `--distance`, `--still` | place the camera |
 | `--shot NAME` | fly a keyframed camera move and quit when it ends: flyover, reveal, dolly, orbit, rows, closeup-kevin, closeup-lilmoist, closeup-wobbles |
 | `--warmup S` | run the world S seconds before the first frame |
+| `--scene round`, `--scene final` | a scripted round with six beans, or the two-bean final |
+| `--game --players N` | a full physics game with N bot players |
+| `--cast "Kevin,Gus"` | pick the players by name |
+| `--shot wide\|top\|low\|chairs\|follow\|action` | game cameras; `--focus Kevin` sets who `follow` tracks |
+| `--rounds 1,5` | record only those rounds |
+| `--empty N` | N chairs and no beans, for the empty-chair shots (`--shot empty-wide`, `empty-push`, `empty-orbit`, `empty-crane`, `empty-chair`) |
+
+Recording runs four simulation steps per frame. Alongside `out.mp4`, scenes write
+`out-slowmo.mp4` at quarter speed, and games write `out-slowmo-N.mp4` for each
+scramble.
+
+`chairs_sim` plays games headless at about half a million steps a second and
+prints who got hit and knocked off each round: `./build/chairs_sim --seed 56 -v`.
 
 ## Layout
 
@@ -50,4 +70,10 @@ cmake --build build -j
 | `src/names.hpp` | the 100 bean names, indexed by bean id |
 | `src/meadow.*` | the palette, world layout and bean animation |
 | `src/shots.*` | keyframed camera moves on Catmull-Rom splines |
+| `src/stage.*` | scripted round and final scenes |
+| `src/game.*` | the rules and physics of musical chairs |
+| `src/bots.*` | scripted bot players |
+| `src/view.*` | draws a game in the meadow, with its cameras |
+| `src/fx.*` | confetti, sparks, launch trails |
+| `tools/sim.cpp` | headless game runner |
 | `src/main.cpp` | window, camera, look settings, recording |

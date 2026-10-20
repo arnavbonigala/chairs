@@ -235,6 +235,34 @@ void Meadow::updateBean(Bean& bean, float dt) {
         for (Entity e : bean.eyes) scene.world.get<Transform>(e).scale = Vec3{1.25f, 1.25f, 1.25f};
         return;
     }
+    float lift = 0, squash = 0;
+    if (bean.driven) {
+        const Vec3 before = root.position;
+        const float ground = height(bean.drive.x, bean.drive.z);
+        root.position = Vec3{bean.drive.x, ground + bean.drive.y, bean.drive.z};
+        const Vec3 step{root.position.x - before.x, 0, root.position.z - before.z};
+        const float speed = dt > 0 ? length(step) / dt : 0.0f;
+        float turn = bean.driveYaw - bean.yaw;
+        while (turn > PI) turn -= 2 * PI;
+        while (turn < -PI) turn += 2 * PI;
+        bean.yaw += turn * std::min(1.0f, dt * 16.0f);
+        root.rotation = Quat::axisAngle(Vec3{0, 1, 0}, bean.yaw);
+        if (bean.driveGrounded && speed > 0.25f) {
+            bean.stride += dt * std::min(speed, 3.5f) * 2.4f;
+            const float s = std::fabs(std::sin(bean.stride * PI));
+            lift = s * 0.13f * std::min(1.0f, speed / 1.5f);
+            squash = (0.08f - 0.16f * s) * std::min(1.0f, speed / 1.5f);
+        } else {
+            bean.stride = 0.0f;
+        }
+        if (!bean.driveGrounded) bean.wasAirborne += dt;
+        else if (bean.wasAirborne > 0.12f) {
+            bean.land = 1.0f;
+            bean.wasAirborne = 0.0f;
+        } else {
+            bean.wasAirborne = 0.0f;
+        }
+    } else {
     Vec3 to = bean.target - root.position;
     to.y = 0;
     const float dist = length(to);
@@ -268,7 +296,6 @@ void Meadow::updateBean(Bean& bean, float dt) {
     }
     root.rotation = Quat::axisAngle(Vec3{0, 1, 0}, bean.yaw);
 
-    float lift = 0, squash = 0;
     if (bean.hop > 0.0f) {
         bean.hop -= dt / bean.hopTime;
         const float t = 1.0f - std::max(bean.hop, 0.0f);
@@ -280,14 +307,15 @@ void Meadow::updateBean(Bean& bean, float dt) {
             bean.rest = random_.uniform(0.0f, 0.12f);
         }
     }
-    if (bean.land > 0.0f) {
-        bean.land = std::max(0.0f, bean.land - dt * 5.0f);
-        squash += 0.2f * std::sin(bean.land * PI);
-    }
     root.position += bean.knock * dt;
     bean.knock = bean.knock * std::exp(-5.0f * dt);
     bean.elevation += (bean.lift - bean.elevation) * std::min(1.0f, dt * 10.0f);
     root.position.y = height(root.position.x, root.position.z) + bean.elevation;
+    }
+    if (bean.land > 0.0f) {
+        bean.land = std::max(0.0f, bean.land - dt * 5.0f);
+        squash += 0.2f * std::sin(bean.land * PI);
+    }
 
     bean.tiltVel += (-bean.tilt * 140.0f - bean.tiltVel * 7.0f) * dt;
     bean.tilt += bean.tiltVel * dt;

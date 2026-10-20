@@ -11,6 +11,10 @@
 #include "meadow.hpp"
 #include "shots.hpp"
 #include "stage.hpp"
+#include "bots.hpp"
+#include "names.hpp"
+#include "view.hpp"
+#include "kit.hpp"
 #include "render/gl.hpp"
 #include "render/overlay.hpp"
 #include "render/recorder.hpp"
@@ -151,7 +155,11 @@ int main(int argc, char** argv) {
     uint32_t seed = 3;
     const char* record = nullptr;
     int lineup = 0;
-    std::string shotName, sceneName;
+    std::string shotName, sceneName, cast, focusName;
+    bool playGame = false;
+    int empty = 0;
+    std::vector<int> recordRounds;
+    int players = 6;
     float warmup = 0.0f;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--resolution") && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &width, &height);
@@ -170,6 +178,42 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--shot") && i + 1 < argc) shotName = argv[++i];
         else if (!std::strcmp(argv[i], "--scene") && i + 1 < argc) sceneName = argv[++i];
         else if (!std::strcmp(argv[i], "--no-tags")) orbit.tags = false;
+        else if (!std::strcmp(argv[i], "--game")) playGame = true;
+        else if (!std::strcmp(argv[i], "--players") && i + 1 < argc) players = std::atoi(argv[++i]);
+        else if (!std::strcmp(argv[i], "--cast") && i + 1 < argc) cast = argv[++i];
+        else if (!std::strcmp(argv[i], "--focus") && i + 1 < argc) focusName = argv[++i];
+        else if (!std::strcmp(argv[i], "--empty") && i + 1 < argc) empty = std::atoi(argv[++i]);
+        else if (!std::strcmp(argv[i], "--rounds") && i + 1 < argc) {
+            const char* r = argv[++i];
+            while (*r) {
+                recordRounds.push_back(std::atoi(r));
+                while (*r && *r != ',') ++r;
+                if (*r == ',') ++r;
+            }
+        }
+    }
+    std::vector<int> castIds;
+    if (playGame) {
+        size_t start = 0;
+        while (!cast.empty() && start <= cast.size()) {
+            const size_t comma = cast.find(',', start);
+            const std::string name = cast.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+            int found = -1;
+            for (int k = 0; k < NAME_COUNT; ++k)
+                if (name == NAMES[k]) found = k;
+            if (found < 0) {
+                std::fprintf(stderr, "no bean named %s\n", name.c_str());
+                return 1;
+            }
+            castIds.push_back(found);
+            if (comma == std::string::npos) break;
+            start = comma + 1;
+        }
+        Random pick(seed * 31 + 7);
+        while (static_cast<int>(castIds.size()) < players) {
+            const int id = static_cast<int>(pick.below(NAME_COUNT));
+            if (std::find(castIds.begin(), castIds.end(), id) == castIds.end()) castIds.push_back(id);
+        }
     }
 
     const Routine* script = nullptr;
@@ -179,7 +223,9 @@ int main(int argc, char** argv) {
     }
     const Shot* shot = nullptr;
     if (!shotName.empty()) {
-        const auto sceneShots = script ? Stage::shots(sceneName) : std::vector<std::string>{};
+        const auto sceneShots = script ? Stage::shots(sceneName)
+                                : playGame ? std::vector<std::string>{"wide", "top", "low", "chairs", "follow", "action"}
+                                           : std::vector<std::string>{};
         const bool sceneShot = std::find(sceneShots.begin(), sceneShots.end(), shotName) != sceneShots.end();
         if (!sceneShot && !(shot = findShot(shotName))) {
             std::fprintf(stderr, "unknown shot %s; shots:", shotName.c_str());
@@ -214,13 +260,44 @@ int main(int argc, char** argv) {
     }
     Meadow meadow;
     if (script) meadow.build(seed, script->beans);
-    else meadow.build(seed, beans);
+    else if (playGame) meadow.build(seed, castIds);
+    else meadow.build(seed, empty > 0 ? 0 : beans);
+    if (empty > 0) {
+        const uint32_t mesh = meadow.assets.addMesh(kit::chair(Vec3{0.78f, 0.52f, 0.32f}, Vec3{0.92f, 0.3f, 0.32f}));
+        Material wood;
+        wood.name = "chair";
+        wood.roughness = 0.85f;
+        const uint32_t material = meadow.assets.addMaterial(wood);
+        const float ring = std::max(1.6f, static_cast<float>(empty) * 1.7f / (2.0f * PI));
+        for (int i = 0; i < empty; ++i) {
+            const float a = static_cast<float>(i) / static_cast<float>(empty) * 2.0f * PI;
+            const Vec3 out{std::cos(a), 0, std::sin(a)};
+            meadow.place(mesh, material, out * ring, std::atan2(out.x, out.z), 1.0f);
+        }
+        meadow.scene.updateTransforms(nullptr);
+    }
     if (lineup > 0) meadow.lineup(lineup);
     std::unique_ptr<Stage> stage;
     if (script) {
         stage = std::make_unique<Stage>(meadow, *script);
-        renderer.particles = {&stage->confetti, &stage->sparks};
+        renderer.particles = {&stage->fx.confetti, &stage->fx.sparks};
         meadow.scene.updateTransforms(nullptr);
+    }
+    std::unique_ptr<Game> game;
+    std::unique_ptr<GameView> view;
+    std::vector<Bot> bots;
+    std::vector<Input> inputs;
+    Random botRandom(seed * 1000 + 1);
+    int focus = 0;
+    if (playGame) {
+        game = std::make_unique<Game>(castIds, seed);
+        view = std::make_unique<GameView>(meadow, *game);
+        renderer.particles = {&view->fx.confetti, &view->fx.sparks};
+        for (size_t i = 0; i < castIds.size(); ++i) bots.push_back(Bot::random(botRandom));
+        inputs.resize(castIds.size());
+        for (size_t i = 0; i < castIds.size(); ++i)
+            if (!focusName.empty() && focusName == NAMES[castIds[i]]) focus = static_cast<int>(i);
+        meadow.update(0.0f);
     }
     renderer.uploadAssets(meadow.assets);
     style(renderer, meadow.palette);
@@ -228,7 +305,7 @@ int main(int argc, char** argv) {
     for (float t = 0; t < warmup; t += 1.0f / 60.0f) meadow.update(1.0f / 60.0f);
     if (shot && frames <= 0) frames = static_cast<int>(shot->seconds * 60.0f + 0.5f);
     if (stage && frames <= 0) frames = static_cast<int>(stage->script.length * 60.0f + 0.5f);
-    const int substeps = stage ? 4 : 1;
+    const int substeps = stage || game ? 4 : 1;
 
     Overlay overlay;
     if (!overlay.init("", error)) std::fprintf(stderr, "overlay: %s\n", error.c_str());
@@ -239,11 +316,14 @@ int main(int argc, char** argv) {
     if (record && !recorder.open(record, w, h, 60, error)) std::fprintf(stderr, "record: %s\n", error.c_str());
     if (record && stage && substeps > 1 && !slowRecorder.open(slowPath(record), w, h, 60, error))
         std::fprintf(stderr, "record: %s\n", error.c_str());
+    int slowIndex = 0;
 
     std::vector<float> shown;
     double last = glfwGetTime();
     float time = 0, sinceRender = 0;
     for (int frame = 0; !glfwWindowShouldClose(window) && (frames <= 0 || frame < frames); ++frame) {
+        if (game && game->phase == Game::Over && view->overTime() > 4.0f && record) break;
+        if (game && record && !recordRounds.empty() && game->round > *std::max_element(recordRounds.begin(), recordRounds.end())) break;
         double now = glfwGetTime();
         const float frameDt = record ? 1.0f / 60.0f : static_cast<float>(std::min(now - last, 0.1));
         last = now;
@@ -253,12 +333,33 @@ int main(int argc, char** argv) {
             time += dt;
             sinceRender += dt;
             if (orbit.spin && !shot && !stage) orbit.angle += dt * 0.08f;
-            if (stage) stage->update(dt);
-            else meadow.update(dt);
+            if (stage) {
+                stage->update(dt);
+            } else if (game) {
+                for (size_t i = 0; i < bots.size(); ++i) inputs[i] = bots[i].think(*game, static_cast<int>(i), botRandom);
+                game->step(inputs);
+                view->sync(dt);
+                meadow.update(dt);
+            } else {
+                meadow.update(dt);
+            }
 
-            const bool realtime = step == substeps - 1;
-            const bool slow = slowRecorder.recording() && stage->time >= stage->script.slowFrom &&
-                              stage->time < stage->script.slowTo;
+            const bool wanted = !game || recordRounds.empty() ||
+                                std::find(recordRounds.begin(), recordRounds.end(), game->round) != recordRounds.end();
+            const bool realtime = step == substeps - 1 && wanted;
+            if (game && record) {
+                const bool want = view->slowWindow() && wanted;
+                if (want && !slowRecorder.recording()) {
+                    std::string path = slowPath(record);
+                    const size_t dot = path.find_last_of('.');
+                    path.insert(dot == std::string::npos ? path.size() : dot, "-" + std::to_string(++slowIndex));
+                    if (!slowRecorder.open(path, w, h, 60, error)) std::fprintf(stderr, "record: %s\n", error.c_str());
+                } else if (!want && slowRecorder.recording()) {
+                    slowRecorder.close();
+                }
+            }
+            const bool slow = slowRecorder.recording() &&
+                              (game || (stage->time >= stage->script.slowFrom && stage->time < stage->script.slowTo));
             if (!realtime && !slow) continue;
 
             int windowWidth = 0, windowHeight = 0;
@@ -277,7 +378,8 @@ int main(int argc, char** argv) {
             float fov = 50.0f;
             CameraKey k;
             if (shot) k = shot->at(time);
-            if (shot || (stage && !shotName.empty() && stage->camera(shotName, k))) {
+            if (shot || (stage && !shotName.empty() && stage->camera(shotName, k)) ||
+                (view && !shotName.empty() && view->camera(shotName, focus, k))) {
                 eye = k.eye;
                 target = k.target;
                 fov = k.fov;
@@ -306,6 +408,7 @@ int main(int argc, char** argv) {
             glfwSwapBuffers(window);
         }
     }
+    if (game && game->winner >= 0) std::printf("winner %s after %d rounds\n", NAMES[castIds[static_cast<size_t>(game->winner)]], game->round);
     if (stage && stage->loser >= 0)
         std::printf("loser %s\n", Meadow::beanName(meadow.beans[stage->players[static_cast<size_t>(stage->loser)].bean].id));
     recorder.close();

@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "meadow.hpp"
-#include "scene/particles.hpp"
+#include "fx.hpp"
 #include "shots.hpp"
 
 namespace chairs {
@@ -50,8 +50,7 @@ public:
     Routine script;
     std::vector<Seat> seats;
     std::vector<Player> players;
-    ParticleSystem confetti;
-    ParticleSystem sparks;
+    Effects fx;
     float time = 0;
     bool music = true;
     int loser = -1;
@@ -71,7 +70,6 @@ private:
     void celebrate(const Vec3& at);
     void launch(Player& p);
 
-    Random random_{77};
     Vec3 smoothed_;
     bool smoothedSet_ = false;
     float nextCheer_ = 0;

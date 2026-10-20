@@ -65,6 +65,12 @@ struct Bean {
     float spin = 0;
     float spinRate = 0;
     float shake = 0;
+    bool driven = false;
+    Vec3 drive;
+    float driveYaw = 0;
+    bool driveGrounded = true;
+    float stride = 0;
+    float wasAirborne = 0;
 };
 
 class Meadow {
