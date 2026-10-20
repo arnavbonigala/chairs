@@ -2,6 +2,7 @@
 
 #include "core/noise.hpp"
 #include "kit.hpp"
+#include "names.hpp"
 #include "scene/components.hpp"
 
 namespace chairs {
@@ -150,7 +151,7 @@ void Meadow::build(uint32_t seed, int beanCount) {
     eyeMesh_ = assets.addMesh(kit::eye());
     for (int i = 0; i < beanCount; ++i) {
         float a = static_cast<float>(i) / static_cast<float>(beanCount) * 2.0f * PI;
-        addBean(Vec3{std::cos(a) * 4.0f, 0.0f, std::sin(a) * 4.0f}, p.teams[i % 8]);
+        addBean(i, Vec3{std::cos(a) * 4.0f, 0.0f, std::sin(a) * 4.0f});
     }
 
     Entity sun = scene.create(Transform{});
@@ -163,8 +164,22 @@ void Meadow::build(uint32_t seed, int beanCount) {
     scene.updateTransforms(nullptr);
 }
 
-void Meadow::addBean(const Vec3& position, const Vec3& color) {
+Vec3 Meadow::beanColor(int id) {
+    const float hue = std::fmod(static_cast<float>(id) * 0.618034f, 1.0f) * 6.0f;
+    const float sat = 0.6f + 0.22f * static_cast<float>((id * 7) % 3) / 2.0f;
+    const float value = 0.96f - 0.12f * static_cast<float>((id * 5) % 4) / 3.0f;
+    const float x = 1.0f - std::fabs(std::fmod(hue, 2.0f) - 1.0f);
+    Vec3 rgb = hue < 1 ? Vec3{1, x, 0} : hue < 2 ? Vec3{x, 1, 0} : hue < 3 ? Vec3{0, 1, x}
+             : hue < 4 ? Vec3{0, x, 1} : hue < 5 ? Vec3{x, 0, 1} : Vec3{1, 0, x};
+    return (Vec3{1, 1, 1} * (1.0f - sat) + rgb * sat) * value;
+}
+
+const char* Meadow::beanName(int id) { return NAMES[((id % NAME_COUNT) + NAME_COUNT) % NAME_COUNT]; }
+
+void Meadow::addBean(int id, const Vec3& position) {
+    const Vec3 color = beanColor(id);
     Bean bean;
+    bean.id = id;
     Transform rootT;
     rootT.position = position;
     bean.root = scene.create(rootT);

@@ -23,11 +23,10 @@ struct Palette {
     Vec3 skyHorizon{0.62f, 0.84f, 1.0f};
     Vec3 skyGround{0.5f, 0.66f, 0.42f};
     Vec3 sun{1.0f, 0.93f, 0.8f};
-    Vec3 teams[8] = {{0.96f, 0.32f, 0.32f}, {0.24f, 0.58f, 0.98f}, {1.0f, 0.78f, 0.2f}, {0.44f, 0.82f, 0.34f},
-                     {0.66f, 0.42f, 0.96f}, {1.0f, 0.52f, 0.72f}, {0.2f, 0.82f, 0.78f}, {1.0f, 0.56f, 0.2f}};
 };
 
 struct Bean {
+    int id = 0;
     Entity root = NULL_ENTITY;
     Entity body = NULL_ENTITY;
     Entity eyes[2] = {NULL_ENTITY, NULL_ENTITY};
@@ -51,6 +50,8 @@ public:
     void update(float dt);
     void lineup();
     float height(float x, float z) const;
+    static Vec3 beanColor(int id);
+    static const char* beanName(int id);
 
 private:
     struct Cloud {
@@ -59,7 +60,7 @@ private:
     };
 
     Entity place(uint32_t mesh, uint32_t material, const Vec3& position, float yaw, float scale, uint32_t tint = 0);
-    void addBean(const Vec3& position, const Vec3& color);
+    void addBean(int id, const Vec3& position);
     void updateBean(Bean& bean, float dt);
 
     std::vector<Cloud> clouds_;

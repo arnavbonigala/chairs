@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
+#include <algorithm>
 
 #include "core/jobs.hpp"
 #include "meadow.hpp"
@@ -24,6 +26,7 @@ struct Orbit {
     double lastX = 0, lastY = 0;
     bool spin = true;
     bool hud = false;
+    bool tags = true;
 };
 
 Orbit orbit;
@@ -33,6 +36,7 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
     if (key == GLFW_KEY_ESCAPE) glfwSetWindowShouldClose(window, GLFW_TRUE);
     if (key == GLFW_KEY_SPACE) orbit.spin = !orbit.spin;
     if (key == GLFW_KEY_H) orbit.hud = !orbit.hud;
+    if (key == GLFW_KEY_N) orbit.tags = !orbit.tags;
 }
 
 void buttonCallback(GLFWwindow* window, int button, int action, int) {
@@ -51,6 +55,32 @@ void cursorCallback(GLFWwindow*, double x, double y) {
 
 void scrollCallback(GLFWwindow*, double, double dy) {
     orbit.distance = std::clamp(orbit.distance * std::pow(0.9f, static_cast<float>(dy)), 3.0f, 120.0f);
+}
+
+void nametags(Overlay& overlay, Meadow& meadow, const Mat4& viewProj, int w, int h) {
+    struct Tag {
+        float depth, x, y;
+        int id;
+    };
+    std::vector<Tag> tags;
+    for (const Bean& bean : meadow.beans) {
+        const Mat4& m = meadow.scene.world.get<WorldTransform>(bean.body).matrix;
+        const Vec4 clip = viewProj * Vec4{m.m[3][0], m.m[3][1] + 1.62f, m.m[3][2], 1.0f};
+        if (clip.w < 0.5f || clip.w > 45.0f) continue;
+        tags.push_back(Tag{clip.w, (clip.x / clip.w * 0.5f + 0.5f) * static_cast<float>(w),
+                           (0.5f - clip.y / clip.w * 0.5f) * static_cast<float>(h), bean.id});
+    }
+    std::sort(tags.begin(), tags.end(), [](const Tag& a, const Tag& b) { return a.depth > b.depth; });
+    const float scale = static_cast<float>(h) / 1080.0f;
+    for (const Tag& t : tags) {
+        const float size = std::clamp(420.0f / t.depth, 14.0f, 44.0f) * scale;
+        const char* name = Meadow::beanName(t.id);
+        const Vec2 extent = overlay.measure(name, size);
+        const float fade = std::clamp((45.0f - t.depth) / 10.0f, 0.0f, 1.0f);
+        const Vec3 c = Meadow::beanColor(t.id) * 0.35f;
+        overlay.text(name, t.x - extent.x * 0.5f, t.y - extent.y, size, Vec4{1, 1, 1, fade}, size * 0.12f,
+                     Vec4{c.x, c.y, c.z, fade});
+    }
 }
 
 void style(Renderer& renderer, const Palette& p) {
@@ -94,6 +124,7 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--still")) orbit.spin = false;
         else if (!std::strcmp(argv[i], "--lineup")) lineup = true;
         else if (!std::strcmp(argv[i], "--hud")) orbit.hud = true;
+        else if (!std::strcmp(argv[i], "--no-tags")) orbit.tags = false;
     }
 
     if (!glfwInit()) return 1;
@@ -157,6 +188,7 @@ int main(int argc, char** argv) {
         const Mat4 projection = perspective(radians(50.0f), static_cast<float>(w) / static_cast<float>(h), 0.1f, 600.0f);
         renderer.render(meadow.scene, meadow.assets, view, projection, eye, &jobs);
 
+        if (orbit.tags && overlay.font().loaded()) nametags(overlay, meadow, projection * view, w, h);
         if (orbit.hud && overlay.font().loaded()) {
             const RenderStats& s = renderer.stats();
             char text[256];
@@ -164,8 +196,8 @@ int main(int argc, char** argv) {
                           s.drawCalls + s.shadowDrawCalls, s.visible, s.candidates, static_cast<double>(s.triangles) * 1e-6);
             const float scale = static_cast<float>(h) / 1080.0f;
             overlay.text(text, 24 * scale, 24 * scale, 26 * scale, Vec4{1, 1, 1, 1}, 3 * scale);
-            overlay.flush(renderer.outputFramebuffer(), w, h);
         }
+        overlay.flush(renderer.outputFramebuffer(), w, h);
 
         recorder.capture(renderer.outputFramebuffer());
         renderer.present(windowWidth, windowHeight);
