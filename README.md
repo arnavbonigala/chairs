@@ -11,7 +11,9 @@ and a painted gradient sky.
 The beans are smooth lathed bodies with googly eyes. They hop with squash and
 stretch, turn toward where they are going and blink on their own. There are 100
 of them, each with a fixed name and colour, so the same bean is always the same
-character from one video to the next. Names float above their heads.
+character from one video to the next. Names float above their heads and fade out
+when another bean blocks the view. Standing in formation, they breathe, glance
+around and do the odd hop in place.
 
 ## Build
 
@@ -37,6 +39,8 @@ cmake --build build -j
 | `--lineup` | stand the beans in a row facing the camera |
 | `--grid 10` | stand them in ranks of 10, the contestant shot with `--beans 100` |
 | `--angle`, `--pitch`, `--distance`, `--still` | place the camera |
+| `--shot NAME` | fly a keyframed camera move and quit when it ends: flyover, reveal, dolly, orbit, rows, closeup-kevin, closeup-lilmoist, closeup-wobbles |
+| `--warmup S` | run the world S seconds before the first frame |
 
 ## Layout
 
@@ -45,4 +49,5 @@ cmake --build build -j
 | `src/kit.*` | mesh generators: terrain, trees, pines, bushes, rocks, flowers, grass, clouds, bean body, eye |
 | `src/names.hpp` | the 100 bean names, indexed by bean id |
 | `src/meadow.*` | the palette, world layout and bean animation |
+| `src/shots.*` | keyframed camera moves on Catmull-Rom splines |
 | `src/main.cpp` | window, camera, look settings, recording |

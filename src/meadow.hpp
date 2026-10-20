@@ -37,6 +37,12 @@ struct Bean {
     float blink = 0;
     float nextBlink = 2;
     float rest = 0;
+    bool idle = false;
+    float phase = 0;
+    float look[2] = {0, 0};
+    float lookTarget[2] = {0, 0};
+    float nextLook = 1;
+    float nextHop = 3;
 };
 
 class Meadow {
@@ -66,6 +72,7 @@ private:
     std::vector<Cloud> clouds_;
     Random random_;
     uint32_t seed_ = 1;
+    float time_ = 0;
     uint32_t beanMesh_ = 0, eyeMesh_ = 0, beanMaterial_ = 0, eyeMaterial_ = 0;
 };
 

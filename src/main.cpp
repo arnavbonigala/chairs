@@ -8,6 +8,7 @@
 
 #include "core/jobs.hpp"
 #include "meadow.hpp"
+#include "shots.hpp"
 #include "render/gl.hpp"
 #include "render/overlay.hpp"
 #include "render/recorder.hpp"
@@ -57,18 +58,50 @@ void scrollCallback(GLFWwindow*, double, double dy) {
     orbit.distance = std::clamp(orbit.distance * std::pow(0.9f, static_cast<float>(dy)), 3.0f, 120.0f);
 }
 
-void nametags(Overlay& overlay, Meadow& meadow, const Mat4& viewProj, int w, int h) {
+float segmentDistance2(const Vec3& p1, const Vec3& q1, const Vec3& p2, const Vec3& q2) {
+    const Vec3 d1 = q1 - p1, d2 = q2 - p2, r = p1 - p2;
+    const float a = dot(d1, d1), e = dot(d2, d2), f = dot(d2, r), c = dot(d1, r), b = dot(d1, d2);
+    const float denom = a * e - b * b;
+    float s = denom > 1e-8f ? std::clamp((b * f - c * e) / denom, 0.0f, 1.0f) : 0.0f;
+    float t = (b * s + f) / e;
+    if (t < 0.0f) {
+        t = 0.0f;
+        s = std::clamp(-c / a, 0.0f, 1.0f);
+    } else if (t > 1.0f) {
+        t = 1.0f;
+        s = std::clamp((b - c) / a, 0.0f, 1.0f);
+    }
+    return length2(p1 + d1 * s - (p2 + d2 * t));
+}
+
+void nametags(Overlay& overlay, Meadow& meadow, const Mat4& viewProj, const Vec3& camera, int w, int h, float dt,
+              std::vector<float>& shown) {
     struct Tag {
-        float depth, x, y;
+        float depth, x, y, alpha;
         int id;
     };
+    const size_t n = meadow.beans.size();
+    shown.resize(n, 0.0f);
+    std::vector<Vec3> base(n);
+    for (size_t i = 0; i < n; ++i) {
+        const Mat4& m = meadow.scene.world.get<WorldTransform>(meadow.beans[i].body).matrix;
+        base[i] = Vec3{m.m[3][0], m.m[3][1], m.m[3][2]};
+    }
     std::vector<Tag> tags;
-    for (const Bean& bean : meadow.beans) {
-        const Mat4& m = meadow.scene.world.get<WorldTransform>(bean.body).matrix;
-        const Vec4 clip = viewProj * Vec4{m.m[3][0], m.m[3][1] + 1.62f, m.m[3][2], 1.0f};
+    for (size_t i = 0; i < n; ++i) {
+        const Vec3 face = base[i] + Vec3{0, 1.0f, 0};
+        bool hidden = false;
+        for (size_t j = 0; j < n && !hidden; ++j) {
+            if (j == i || length2(base[j] - camera) >= length2(base[i] - camera)) continue;
+            hidden = segmentDistance2(camera, face, base[j] + Vec3{0, 0.42f, 0}, base[j] + Vec3{0, 1.08f, 0}) < 0.42f * 0.42f;
+        }
+        shown[i] = std::clamp(shown[i] + (hidden ? -dt : dt) * 6.0f, 0.0f, 1.0f);
+        if (shown[i] <= 0.0f) continue;
+        const Vec4 clip = viewProj * Vec4{base[i].x, base[i].y + 1.62f, base[i].z, 1.0f};
         if (clip.w < 0.5f || clip.w > 45.0f) continue;
+        const float fade = std::clamp((45.0f - clip.w) / 10.0f, 0.0f, 1.0f) * shown[i];
         tags.push_back(Tag{clip.w, (clip.x / clip.w * 0.5f + 0.5f) * static_cast<float>(w),
-                           (0.5f - clip.y / clip.w * 0.5f) * static_cast<float>(h), bean.id});
+                           (0.5f - clip.y / clip.w * 0.5f) * static_cast<float>(h), fade, meadow.beans[i].id});
     }
     std::sort(tags.begin(), tags.end(), [](const Tag& a, const Tag& b) { return a.depth > b.depth; });
     const float scale = static_cast<float>(h) / 1080.0f;
@@ -76,10 +109,9 @@ void nametags(Overlay& overlay, Meadow& meadow, const Mat4& viewProj, int w, int
         const float size = std::clamp(420.0f / t.depth, 14.0f, 44.0f) * scale;
         const char* name = Meadow::beanName(t.id);
         const Vec2 extent = overlay.measure(name, size);
-        const float fade = std::clamp((45.0f - t.depth) / 10.0f, 0.0f, 1.0f);
         const Vec3 c = Meadow::beanColor(t.id) * 0.35f;
-        overlay.text(name, t.x - extent.x * 0.5f, t.y - extent.y, size, Vec4{1, 1, 1, fade}, size * 0.12f,
-                     Vec4{c.x, c.y, c.z, fade});
+        overlay.text(name, t.x - extent.x * 0.5f, t.y - extent.y, size, Vec4{1, 1, 1, t.alpha}, size * 0.12f,
+                     Vec4{c.x, c.y, c.z, t.alpha});
     }
 }
 
@@ -112,6 +144,8 @@ int main(int argc, char** argv) {
     uint32_t seed = 3;
     const char* record = nullptr;
     int lineup = 0;
+    const Shot* shot = nullptr;
+    float warmup = 0.0f;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--resolution") && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &width, &height);
         else if (!std::strcmp(argv[i], "--record") && i + 1 < argc) record = argv[++i];
@@ -125,6 +159,16 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--lineup")) lineup = 1000;
         else if (!std::strcmp(argv[i], "--grid") && i + 1 < argc) lineup = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "--hud")) orbit.hud = true;
+        else if (!std::strcmp(argv[i], "--warmup") && i + 1 < argc) warmup = std::strtof(argv[++i], nullptr);
+        else if (!std::strcmp(argv[i], "--shot") && i + 1 < argc) {
+            shot = findShot(argv[++i]);
+            if (!shot) {
+                std::fprintf(stderr, "unknown shot %s; shots:", argv[i]);
+                for (const Shot& s : shots()) std::fprintf(stderr, " %s", s.name.c_str());
+                std::fprintf(stderr, "\n");
+                return 1;
+            }
+        }
         else if (!std::strcmp(argv[i], "--no-tags")) orbit.tags = false;
     }
 
@@ -155,6 +199,9 @@ int main(int argc, char** argv) {
     renderer.uploadAssets(meadow.assets);
     style(renderer, meadow.palette);
 
+    for (float t = 0; t < warmup; t += 1.0f / 60.0f) meadow.update(1.0f / 60.0f);
+    if (shot && frames <= 0) frames = static_cast<int>(shot->seconds * 60.0f + 0.5f);
+
     Overlay overlay;
     if (!overlay.init("", error)) std::fprintf(stderr, "overlay: %s\n", error.c_str());
 
@@ -165,6 +212,7 @@ int main(int argc, char** argv) {
         if (!recorder.open(record, w, h, 60, error)) std::fprintf(stderr, "record: %s\n", error.c_str());
     }
 
+    std::vector<float> shown;
     double last = glfwGetTime();
     float time = 0;
     for (int frame = 0; !glfwWindowShouldClose(window) && (frames <= 0 || frame < frames); ++frame) {
@@ -182,14 +230,22 @@ int main(int argc, char** argv) {
         renderer.resize(w, h);
         renderer.options.time = time;
 
-        const Vec3 eye = orbit.focus + Vec3{std::sin(orbit.angle) * std::cos(orbit.pitch), std::sin(orbit.pitch),
-                                            std::cos(orbit.angle) * std::cos(orbit.pitch)} *
-                                           orbit.distance;
-        const Mat4 view = lookAt(eye, orbit.focus, Vec3{0, 1, 0});
-        const Mat4 projection = perspective(radians(50.0f), static_cast<float>(w) / static_cast<float>(h), 0.1f, 600.0f);
+        Vec3 eye = orbit.focus + Vec3{std::sin(orbit.angle) * std::cos(orbit.pitch), std::sin(orbit.pitch),
+                                      std::cos(orbit.angle) * std::cos(orbit.pitch)} *
+                                     orbit.distance;
+        Vec3 target = orbit.focus;
+        float fov = 50.0f;
+        if (shot) {
+            const CameraKey k = shot->at(static_cast<float>(frame) / 60.0f);
+            eye = k.eye;
+            target = k.target;
+            fov = k.fov;
+        }
+        const Mat4 view = lookAt(eye, target, Vec3{0, 1, 0});
+        const Mat4 projection = perspective(radians(fov), static_cast<float>(w) / static_cast<float>(h), 0.1f, 600.0f);
         renderer.render(meadow.scene, meadow.assets, view, projection, eye, &jobs);
 
-        if (orbit.tags && overlay.font().loaded()) nametags(overlay, meadow, projection * view, w, h);
+        if (orbit.tags && overlay.font().loaded()) nametags(overlay, meadow, projection * view, eye, w, h, dt, shown);
         if (orbit.hud && overlay.font().loaded()) {
             const RenderStats& s = renderer.stats();
             char text[256];

@@ -16,6 +16,6 @@ target_include_directories(chairs_world PUBLIC src)
 target_link_libraries(chairs_world PUBLIC skein)
 target_compile_options(chairs_world PRIVATE -Wall -Wextra -Wno-unused-parameter)
 
-add_executable(chairs src/main.cpp)
+add_executable(chairs src/main.cpp src/shots.cpp)
 target_link_libraries(chairs PRIVATE chairs_world skein_gl)
 target_compile_options(chairs PRIVATE -Wall -Wextra -Wno-unused-parameter)
