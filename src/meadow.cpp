@@ -66,6 +66,13 @@ void Meadow::lineup(int columns) {
 }
 
 void Meadow::build(uint32_t seed, int beanCount) {
+    std::vector<int> ids;
+    for (int i = 0; i < beanCount; ++i) ids.push_back(i);
+    build(seed, ids);
+}
+
+void Meadow::build(uint32_t seed, const std::vector<int>& ids) {
+    const int beanCount = static_cast<int>(ids.size());
     seed_ = seed;
     random_ = Random(seed);
     Random& rng = random_;
@@ -156,7 +163,7 @@ void Meadow::build(uint32_t seed, int beanCount) {
     eyeMesh_ = assets.addMesh(kit::eye());
     for (int i = 0; i < beanCount; ++i) {
         float a = static_cast<float>(i) / static_cast<float>(beanCount) * 2.0f * PI;
-        addBean(i, Vec3{std::cos(a) * 4.0f, 0.0f, std::sin(a) * 4.0f});
+        addBean(ids[static_cast<size_t>(i)], Vec3{std::cos(a) * 4.0f, 0.0f, std::sin(a) * 4.0f});
     }
 
     Entity sun = scene.create(Transform{});
@@ -208,14 +215,33 @@ void Meadow::addBean(int id, const Vec3& position) {
     beans.push_back(bean);
 }
 
+void Meadow::hide(Bean& bean) {
+    bean.hidden = true;
+    scene.world.get<Renderable>(bean.body).visible = 0;
+    for (Entity eye : bean.eyes) scene.world.get<Renderable>(eye).visible = 0;
+}
+
 void Meadow::updateBean(Bean& bean, float dt) {
     Transform& root = scene.world.get<Transform>(bean.root);
     Transform& body = scene.world.get<Transform>(bean.body);
+    if (bean.hidden) return;
+    if (bean.flying) {
+        bean.velocity.y -= 7.5f * dt;
+        root.position += bean.velocity * dt;
+        bean.spin += bean.spinRate * dt;
+        body.rotation = Quat::axisAngle(bean.spinAxis, bean.spin);
+        body.position = Vec3{0, 0.75f, 0} - rotate(body.rotation, Vec3{0, 0.75f, 0});
+        body.scale = Vec3{0.92f, 1.12f, 0.92f};
+        for (Entity e : bean.eyes) scene.world.get<Transform>(e).scale = Vec3{1.25f, 1.25f, 1.25f};
+        return;
+    }
     Vec3 to = bean.target - root.position;
     to.y = 0;
     const float dist = length(to);
 
-    if (bean.idle) {
+    if (bean.puppet) {
+        if (bean.hop <= 0.0f && dist > 0.04f) bean.hop = 1.0f;
+    } else if (bean.idle) {
         bean.nextHop -= dt;
         if (bean.nextHop <= 0.0f && bean.hop <= 0.0f) {
             bean.hop = 1.0f;
@@ -232,21 +258,23 @@ void Meadow::updateBean(Bean& bean, float dt) {
         }
     }
 
-    const float desired = std::atan2(to.x, to.z);
-    float turn = desired - bean.yaw;
-    while (turn > PI) turn -= 2 * PI;
-    while (turn < -PI) turn += 2 * PI;
-    if (dist > 0.05f && !bean.idle) bean.yaw += turn * std::min(1.0f, dt * 8.0f);
+    const bool turning = bean.faceSet || (dist > 0.05f && !bean.idle);
+    if (turning) {
+        const float desired = bean.faceSet ? bean.face : std::atan2(to.x, to.z);
+        float turn = desired - bean.yaw;
+        while (turn > PI) turn -= 2 * PI;
+        while (turn < -PI) turn += 2 * PI;
+        bean.yaw += turn * std::min(1.0f, dt * (bean.puppet ? 12.0f : 8.0f));
+    }
     root.rotation = Quat::axisAngle(Vec3{0, 1, 0}, bean.yaw);
 
     float lift = 0, squash = 0;
     if (bean.hop > 0.0f) {
-        const float duration = 0.36f;
-        bean.hop -= dt / duration;
+        bean.hop -= dt / bean.hopTime;
         const float t = 1.0f - std::max(bean.hop, 0.0f);
-        lift = 4.0f * t * (1.0f - t) * 0.32f;
+        lift = 4.0f * t * (1.0f - t) * bean.hopHeight;
         squash = -0.12f * std::sin(t * PI);
-        if (dist > 0.01f) root.position += to * (std::min(dist, 2.4f * dt) / dist);
+        if (dist > 0.001f) root.position += to * (std::min(dist, bean.speed * dt) / dist);
         if (bean.hop <= 0.0f) {
             bean.land = 1.0f;
             bean.rest = random_.uniform(0.0f, 0.12f);
@@ -256,9 +284,19 @@ void Meadow::updateBean(Bean& bean, float dt) {
         bean.land = std::max(0.0f, bean.land - dt * 5.0f);
         squash += 0.2f * std::sin(bean.land * PI);
     }
-    root.position.y = height(root.position.x, root.position.z);
-    body.position = Vec3{0, lift, 0};
-    squash += 0.018f * std::sin(time_ * 2.4f + bean.phase);
+    root.position += bean.knock * dt;
+    bean.knock = bean.knock * std::exp(-5.0f * dt);
+    bean.elevation += (bean.lift - bean.elevation) * std::min(1.0f, dt * 10.0f);
+    root.position.y = height(root.position.x, root.position.z) + bean.elevation;
+
+    bean.tiltVel += (-bean.tilt * 140.0f - bean.tiltVel * 7.0f) * dt;
+    bean.tilt += bean.tiltVel * dt;
+    bean.droop += (bean.droopTarget - bean.droop) * std::min(1.0f, dt * 4.0f);
+    squash += 0.018f * std::sin(time_ * 2.4f + bean.phase) + bean.droop * 0.1f;
+    const float jitter = bean.shake * std::sin(time_ * 90.0f + bean.phase);
+    body.position = Vec3{jitter * 0.03f, lift, 0};
+    body.rotation = Quat::axisAngle(Vec3{1, 0, 0}, bean.tilt + bean.droop * 0.12f) *
+                    Quat::axisAngle(Vec3{0, 0, 1}, jitter * 0.05f);
     body.scale = Vec3{1.0f + squash * 0.6f, 1.0f - squash, 1.0f + squash * 0.6f};
 
     bean.nextBlink -= dt;
@@ -267,10 +305,13 @@ void Meadow::updateBean(Bean& bean, float dt) {
         bean.nextBlink = random_.uniform(1.5f, 5.0f);
     }
     bean.blink = std::max(0.0f, bean.blink - dt / 0.14f);
-    const float lid = 1.0f - 0.9f * std::sin(bean.blink * PI);
+    const float lid = (1.0f - 0.9f * std::sin(bean.blink * PI)) * (1.0f - 0.35f * bean.droop);
 
     bean.nextLook -= dt;
-    if (bean.nextLook <= 0.0f) {
+    if (bean.gazeSet) {
+        bean.lookTarget[0] = bean.gaze[0];
+        bean.lookTarget[1] = bean.gaze[1];
+    } else if (bean.nextLook <= 0.0f) {
         const bool ahead = random_.chance(0.4f);
         bean.lookTarget[0] = ahead ? 0.0f : random_.uniform(-0.6f, 0.6f);
         bean.lookTarget[1] = ahead ? 0.0f : random_.uniform(-0.25f, 0.2f);

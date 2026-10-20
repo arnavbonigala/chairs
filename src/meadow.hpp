@@ -43,6 +43,28 @@ struct Bean {
     float lookTarget[2] = {0, 0};
     float nextLook = 1;
     float nextHop = 3;
+    bool puppet = false;
+    float speed = 2.4f;
+    float hopTime = 0.36f;
+    float hopHeight = 0.32f;
+    float lift = 0;
+    float elevation = 0;
+    bool faceSet = false;
+    float face = 0;
+    Vec3 knock;
+    float tilt = 0;
+    float tiltVel = 0;
+    float droop = 0;
+    float droopTarget = 0;
+    bool gazeSet = false;
+    float gaze[2] = {0, 0};
+    bool flying = false;
+    bool hidden = false;
+    Vec3 velocity;
+    Vec3 spinAxis{1, 0, 0};
+    float spin = 0;
+    float spinRate = 0;
+    float shake = 0;
 };
 
 class Meadow {
@@ -53,6 +75,10 @@ public:
     std::vector<Bean> beans;
 
     void build(uint32_t seed, int beanCount);
+    void build(uint32_t seed, const std::vector<int>& ids);
+    Entity place(uint32_t mesh, uint32_t material, const Vec3& position, float yaw, float scale, uint32_t tint = 0);
+    Vec3 beanPosition(const Bean& bean) { return scene.world.get<Transform>(bean.root).position; }
+    void hide(Bean& bean);
     void update(float dt);
     void lineup(int columns);
     float height(float x, float z) const;
@@ -65,7 +91,6 @@ private:
         float speed;
     };
 
-    Entity place(uint32_t mesh, uint32_t material, const Vec3& position, float yaw, float scale, uint32_t tint = 0);
     void addBean(int id, const Vec3& position);
     void updateBean(Bean& bean, float dt);
 

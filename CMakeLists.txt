@@ -11,11 +11,11 @@ endif()
 set(SKEIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../skein" CACHE PATH "Path to a Skein checkout")
 add_subdirectory(${SKEIN_DIR} skein)
 
-add_library(chairs_world STATIC src/kit.cpp src/meadow.cpp)
+add_library(chairs_world STATIC src/kit.cpp src/meadow.cpp src/stage.cpp src/shots.cpp)
 target_include_directories(chairs_world PUBLIC src)
 target_link_libraries(chairs_world PUBLIC skein)
 target_compile_options(chairs_world PRIVATE -Wall -Wextra -Wno-unused-parameter)
 
-add_executable(chairs src/main.cpp src/shots.cpp)
+add_executable(chairs src/main.cpp)
 target_link_libraries(chairs PRIVATE chairs_world skein_gl)
 target_compile_options(chairs PRIVATE -Wall -Wextra -Wno-unused-parameter)

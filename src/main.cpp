@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -9,6 +10,7 @@
 #include "core/jobs.hpp"
 #include "meadow.hpp"
 #include "shots.hpp"
+#include "stage.hpp"
 #include "render/gl.hpp"
 #include "render/overlay.hpp"
 #include "render/recorder.hpp"
@@ -90,7 +92,7 @@ void nametags(Overlay& overlay, Meadow& meadow, const Mat4& viewProj, const Vec3
     std::vector<Tag> tags;
     for (size_t i = 0; i < n; ++i) {
         const Vec3 face = base[i] + Vec3{0, 1.0f, 0};
-        bool hidden = false;
+        bool hidden = meadow.beans[i].hidden || meadow.beans[i].flying;
         for (size_t j = 0; j < n && !hidden; ++j) {
             if (j == i || length2(base[j] - camera) >= length2(base[i] - camera)) continue;
             hidden = segmentDistance2(camera, face, base[j] + Vec3{0, 0.42f, 0}, base[j] + Vec3{0, 1.08f, 0}) < 0.42f * 0.42f;
@@ -139,12 +141,17 @@ void style(Renderer& renderer, const Palette& p) {
 
 }  // namespace
 
+std::string slowPath(const std::string& path) {
+    const size_t dot = path.find_last_of('.');
+    return dot == std::string::npos ? path + "-slowmo" : path.substr(0, dot) + "-slowmo" + path.substr(dot);
+}
+
 int main(int argc, char** argv) {
     int width = 0, height = 0, frames = 0, beans = 8;
     uint32_t seed = 3;
     const char* record = nullptr;
     int lineup = 0;
-    const Shot* shot = nullptr;
+    std::string shotName, sceneName;
     float warmup = 0.0f;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--resolution") && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &width, &height);
@@ -160,16 +167,28 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--grid") && i + 1 < argc) lineup = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "--hud")) orbit.hud = true;
         else if (!std::strcmp(argv[i], "--warmup") && i + 1 < argc) warmup = std::strtof(argv[++i], nullptr);
-        else if (!std::strcmp(argv[i], "--shot") && i + 1 < argc) {
-            shot = findShot(argv[++i]);
-            if (!shot) {
-                std::fprintf(stderr, "unknown shot %s; shots:", argv[i]);
-                for (const Shot& s : shots()) std::fprintf(stderr, " %s", s.name.c_str());
-                std::fprintf(stderr, "\n");
-                return 1;
-            }
-        }
+        else if (!std::strcmp(argv[i], "--shot") && i + 1 < argc) shotName = argv[++i];
+        else if (!std::strcmp(argv[i], "--scene") && i + 1 < argc) sceneName = argv[++i];
         else if (!std::strcmp(argv[i], "--no-tags")) orbit.tags = false;
+    }
+
+    const Routine* script = nullptr;
+    if (!sceneName.empty() && !(script = findRoutine(sceneName))) {
+        std::fprintf(stderr, "unknown scene %s; scenes: round final\n", sceneName.c_str());
+        return 1;
+    }
+    const Shot* shot = nullptr;
+    if (!shotName.empty()) {
+        const auto sceneShots = script ? Stage::shots(sceneName) : std::vector<std::string>{};
+        const bool sceneShot = std::find(sceneShots.begin(), sceneShots.end(), shotName) != sceneShots.end();
+        if (!sceneShot && !(shot = findShot(shotName))) {
+            std::fprintf(stderr, "unknown shot %s; shots:", shotName.c_str());
+            for (const auto& name : sceneShots) std::fprintf(stderr, " %s", name.c_str());
+            if (!script)
+                for (const Shot& s : shots()) std::fprintf(stderr, " %s", s.name.c_str());
+            std::fprintf(stderr, "\n");
+            return 1;
+        }
     }
 
     if (!glfwInit()) return 1;
@@ -180,7 +199,7 @@ int main(int argc, char** argv) {
     GLFWwindow* window = glfwCreateWindow(1600, 900, "chairs", nullptr, nullptr);
     if (!window) return 1;
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
+    glfwSwapInterval(record ? 0 : 1);
     glfwSetKeyCallback(window, keyCallback);
     glfwSetMouseButtonCallback(window, buttonCallback);
     glfwSetCursorPosCallback(window, cursorCallback);
@@ -194,73 +213,103 @@ int main(int argc, char** argv) {
         return 1;
     }
     Meadow meadow;
-    meadow.build(seed, beans);
+    if (script) meadow.build(seed, script->beans);
+    else meadow.build(seed, beans);
     if (lineup > 0) meadow.lineup(lineup);
+    std::unique_ptr<Stage> stage;
+    if (script) {
+        stage = std::make_unique<Stage>(meadow, *script);
+        renderer.particles = {&stage->confetti, &stage->sparks};
+        meadow.scene.updateTransforms(nullptr);
+    }
     renderer.uploadAssets(meadow.assets);
     style(renderer, meadow.palette);
 
     for (float t = 0; t < warmup; t += 1.0f / 60.0f) meadow.update(1.0f / 60.0f);
     if (shot && frames <= 0) frames = static_cast<int>(shot->seconds * 60.0f + 0.5f);
+    if (stage && frames <= 0) frames = static_cast<int>(stage->script.length * 60.0f + 0.5f);
+    const int substeps = stage ? 4 : 1;
 
     Overlay overlay;
     if (!overlay.init("", error)) std::fprintf(stderr, "overlay: %s\n", error.c_str());
 
-    VideoRecorder recorder;
-    if (record) {
-        int w = width, h = height;
-        if (w <= 0 || h <= 0) glfwGetFramebufferSize(window, &w, &h);
-        if (!recorder.open(record, w, h, 60, error)) std::fprintf(stderr, "record: %s\n", error.c_str());
-    }
+    int w = width, h = height;
+    if (w <= 0 || h <= 0) glfwGetFramebufferSize(window, &w, &h);
+    VideoRecorder recorder, slowRecorder;
+    if (record && !recorder.open(record, w, h, 60, error)) std::fprintf(stderr, "record: %s\n", error.c_str());
+    if (record && stage && substeps > 1 && !slowRecorder.open(slowPath(record), w, h, 60, error))
+        std::fprintf(stderr, "record: %s\n", error.c_str());
 
     std::vector<float> shown;
     double last = glfwGetTime();
-    float time = 0;
+    float time = 0, sinceRender = 0;
     for (int frame = 0; !glfwWindowShouldClose(window) && (frames <= 0 || frame < frames); ++frame) {
         double now = glfwGetTime();
-        float dt = record ? 1.0f / 60.0f : static_cast<float>(std::min(now - last, 0.1));
+        const float frameDt = record ? 1.0f / 60.0f : static_cast<float>(std::min(now - last, 0.1));
         last = now;
-        time += dt;
         glfwPollEvents();
-        if (orbit.spin) orbit.angle += dt * 0.08f;
-        meadow.update(dt);
+        for (int step = 0; step < substeps; ++step) {
+            const float dt = frameDt / static_cast<float>(substeps);
+            time += dt;
+            sinceRender += dt;
+            if (orbit.spin && !shot && !stage) orbit.angle += dt * 0.08f;
+            if (stage) stage->update(dt);
+            else meadow.update(dt);
 
-        int windowWidth = 0, windowHeight = 0;
-        glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
-        const int w = width > 0 ? width : windowWidth, h = height > 0 ? height : windowHeight;
-        renderer.resize(w, h);
-        renderer.options.time = time;
+            const bool realtime = step == substeps - 1;
+            const bool slow = slowRecorder.recording() && stage->time >= stage->script.slowFrom &&
+                              stage->time < stage->script.slowTo;
+            if (!realtime && !slow) continue;
 
-        Vec3 eye = orbit.focus + Vec3{std::sin(orbit.angle) * std::cos(orbit.pitch), std::sin(orbit.pitch),
-                                      std::cos(orbit.angle) * std::cos(orbit.pitch)} *
-                                     orbit.distance;
-        Vec3 target = orbit.focus;
-        float fov = 50.0f;
-        if (shot) {
-            const CameraKey k = shot->at(static_cast<float>(frame) / 60.0f);
-            eye = k.eye;
-            target = k.target;
-            fov = k.fov;
+            int windowWidth = 0, windowHeight = 0;
+            glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
+            if (width <= 0 || height <= 0) {
+                w = windowWidth;
+                h = windowHeight;
+            }
+            renderer.resize(w, h);
+            renderer.options.time = time;
+
+            Vec3 eye = orbit.focus + Vec3{std::sin(orbit.angle) * std::cos(orbit.pitch), std::sin(orbit.pitch),
+                                          std::cos(orbit.angle) * std::cos(orbit.pitch)} *
+                                         orbit.distance;
+            Vec3 target = orbit.focus;
+            float fov = 50.0f;
+            CameraKey k;
+            if (shot) k = shot->at(time);
+            if (shot || (stage && !shotName.empty() && stage->camera(shotName, k))) {
+                eye = k.eye;
+                target = k.target;
+                fov = k.fov;
+            }
+            const Mat4 view = lookAt(eye, target, Vec3{0, 1, 0});
+            const Mat4 projection = perspective(radians(fov), static_cast<float>(w) / static_cast<float>(h), 0.1f, 600.0f);
+            renderer.render(meadow.scene, meadow.assets, view, projection, eye, &jobs);
+
+            if (orbit.tags && overlay.font().loaded())
+                nametags(overlay, meadow, projection * view, eye, w, h, sinceRender, shown);
+            sinceRender = 0;
+            if (orbit.hud && overlay.font().loaded()) {
+                const RenderStats& s = renderer.stats();
+                char text[256];
+                std::snprintf(text, sizeof(text), "%.2f ms gpu  %u draws  %u / %u visible  %.1fM tris", s.gpuMs,
+                              s.drawCalls + s.shadowDrawCalls, s.visible, s.candidates,
+                              static_cast<double>(s.triangles) * 1e-6);
+                const float scale = static_cast<float>(h) / 1080.0f;
+                overlay.text(text, 24 * scale, 24 * scale, 26 * scale, Vec4{1, 1, 1, 1}, 3 * scale);
+            }
+            overlay.flush(renderer.outputFramebuffer(), w, h);
+
+            if (realtime) recorder.capture(renderer.outputFramebuffer());
+            if (slow) slowRecorder.capture(renderer.outputFramebuffer());
+            renderer.present(windowWidth, windowHeight);
+            glfwSwapBuffers(window);
         }
-        const Mat4 view = lookAt(eye, target, Vec3{0, 1, 0});
-        const Mat4 projection = perspective(radians(fov), static_cast<float>(w) / static_cast<float>(h), 0.1f, 600.0f);
-        renderer.render(meadow.scene, meadow.assets, view, projection, eye, &jobs);
-
-        if (orbit.tags && overlay.font().loaded()) nametags(overlay, meadow, projection * view, eye, w, h, dt, shown);
-        if (orbit.hud && overlay.font().loaded()) {
-            const RenderStats& s = renderer.stats();
-            char text[256];
-            std::snprintf(text, sizeof(text), "%.2f ms gpu  %u draws  %u / %u visible  %.1fM tris", s.gpuMs,
-                          s.drawCalls + s.shadowDrawCalls, s.visible, s.candidates, static_cast<double>(s.triangles) * 1e-6);
-            const float scale = static_cast<float>(h) / 1080.0f;
-            overlay.text(text, 24 * scale, 24 * scale, 26 * scale, Vec4{1, 1, 1, 1}, 3 * scale);
-        }
-        overlay.flush(renderer.outputFramebuffer(), w, h);
-
-        recorder.capture(renderer.outputFramebuffer());
-        renderer.present(windowWidth, windowHeight);
-        glfwSwapBuffers(window);
     }
+    if (stage && stage->loser >= 0)
+        std::printf("loser %s\n", Meadow::beanName(meadow.beans[stage->players[static_cast<size_t>(stage->loser)].bean].id));
     recorder.close();
+    slowRecorder.close();
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;

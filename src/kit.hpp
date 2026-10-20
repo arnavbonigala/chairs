@@ -27,6 +27,8 @@ MeshData flower(Random& random, const Vec3& petals);
 MeshData grassTuft(Random& random, const Vec3& base, const Vec3& tip, int blades = 7);
 MeshData cloud(Random& random);
 
+MeshData chair(const Vec3& wood, const Vec3& cushion);
+
 MeshData beanBody(float radius = 0.42f, float height = 1.5f);
 MeshData eye(float radius = 0.16f);
 

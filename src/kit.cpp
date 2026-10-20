@@ -192,6 +192,36 @@ MeshData cloud(Random& random) {
     return m;
 }
 
+MeshData chair(const Vec3& wood, const Vec3& cushion) {
+    MeshData m;
+    m.name = "chair";
+    const uint32_t light = packColor(wood), dark = packColor(wood * 0.72f);
+    MeshData leg = primitives::cylinder(0.05f, 0.4f, 10);
+    for (Vertex& v : leg.vertices) {
+        const float t = (v.position.y + 0.2f) / 0.4f;
+        v.position.x *= 0.8f + 0.25f * t;
+        v.position.z *= 0.8f + 0.25f * t;
+    }
+    for (int i = 0; i < 4; ++i) {
+        const float x = (i & 1) ? 0.33f : -0.33f, z = (i & 2) ? 0.33f : -0.33f;
+        m.append(leg, place(Vec3{x, 0.2f, z}, Vec3{1, 1, 1}), dark);
+    }
+    m.append(primitives::cube(1.0f), place(Vec3{0, 0.43f, 0}, Vec3{0.86f, 0.08f, 0.86f}), light);
+    MeshData pad = primitives::icosphere(0.5f, 3);
+    for (Vertex& v : pad.vertices) v.position.y = std::max(v.position.y, -0.1f);
+    pad.recomputeNormals();
+    m.append(pad, place(Vec3{0, 0.47f, 0.02f}, Vec3{0.74f, 0.1f, 0.72f}), packColor(cushion));
+    for (int side = 0; side < 2; ++side) {
+        const float x = side ? 0.33f : -0.33f;
+        m.append(primitives::cylinder(0.045f, 0.62f, 10), place(Vec3{x, 0.78f, -0.36f}, Vec3{1, 1, 1}), dark);
+    }
+    m.append(primitives::capsule(0.07f, 0.76f, 16, 8),
+             composeTRS(Vec3{0, 1.1f, -0.36f}, Quat::axisAngle(Vec3{0, 0, 1}, PI * 0.5f), Vec3{1, 1, 1}), light);
+    m.append(primitives::cube(1.0f), place(Vec3{0, 0.8f, -0.36f}, Vec3{0.62f, 0.3f, 0.05f}), light);
+    m.recomputeBounds();
+    return m;
+}
+
 MeshData beanBody(float radius, float height) {
     MeshData m;
     m.name = "bean";
