@@ -48,7 +48,7 @@ public:
 
     void build(uint32_t seed, int beanCount);
     void update(float dt);
-    void lineup();
+    void lineup(int columns);
     float height(float x, float z) const;
     static Vec3 beanColor(int id);
     static const char* beanName(int id);

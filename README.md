@@ -35,6 +35,7 @@ cmake --build build -j
 | `--record out.mp4 --frames 600` | record a fixed number of frames at 60 fps, then quit |
 | `--seed N`, `--beans N` | a different meadow, a different crowd |
 | `--lineup` | stand the beans in a row facing the camera |
+| `--grid 10` | stand them in ranks of 10, the contestant shot with `--beans 100` |
 | `--angle`, `--pitch`, `--distance`, `--still` | place the camera |
 
 ## Layout

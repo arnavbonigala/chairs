@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
     int width = 0, height = 0, frames = 0, beans = 8;
     uint32_t seed = 3;
     const char* record = nullptr;
-    bool lineup = false;
+    int lineup = 0;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--resolution") && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &width, &height);
         else if (!std::strcmp(argv[i], "--record") && i + 1 < argc) record = argv[++i];
@@ -122,7 +122,8 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--pitch") && i + 1 < argc) orbit.pitch = std::strtof(argv[++i], nullptr);
         else if (!std::strcmp(argv[i], "--distance") && i + 1 < argc) orbit.distance = std::strtof(argv[++i], nullptr);
         else if (!std::strcmp(argv[i], "--still")) orbit.spin = false;
-        else if (!std::strcmp(argv[i], "--lineup")) lineup = true;
+        else if (!std::strcmp(argv[i], "--lineup")) lineup = 1000;
+        else if (!std::strcmp(argv[i], "--grid") && i + 1 < argc) lineup = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "--hud")) orbit.hud = true;
         else if (!std::strcmp(argv[i], "--no-tags")) orbit.tags = false;
     }
@@ -150,7 +151,7 @@ int main(int argc, char** argv) {
     }
     Meadow meadow;
     meadow.build(seed, beans);
-    if (lineup) meadow.lineup();
+    if (lineup > 0) meadow.lineup(lineup);
     renderer.uploadAssets(meadow.assets);
     style(renderer, meadow.palette);
 

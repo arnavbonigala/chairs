@@ -50,10 +50,14 @@ Entity Meadow::place(uint32_t mesh, uint32_t material, const Vec3& position, flo
     return e;
 }
 
-void Meadow::lineup() {
+void Meadow::lineup(int columns) {
+    const int cols = std::max(1, std::min(columns, static_cast<int>(beans.size())));
+    const int rows = (static_cast<int>(beans.size()) + cols - 1) / cols;
     for (size_t i = 0; i < beans.size(); ++i) {
         Transform& t = scene.world.get<Transform>(beans[i].root);
-        t.position = Vec3{(static_cast<float>(i) - static_cast<float>(beans.size() - 1) * 0.5f) * 1.3f, 0.0f, 0.0f};
+        const int col = static_cast<int>(i) % cols, row = static_cast<int>(i) / cols;
+        t.position = Vec3{(static_cast<float>(col) - static_cast<float>(cols - 1) * 0.5f) * 1.3f, 0.0f,
+                          (static_cast<float>(row) - static_cast<float>(rows - 1) * 0.5f) * 1.5f};
         beans[i].target = t.position;
         beans[i].yaw = 0.0f;
         beans[i].rest = 1e9f;
