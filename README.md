@@ -56,10 +56,10 @@ cmake --build build -j
 | `--gen0` | untrained players that mash random inputs, with fouls off |
 | `--empty N` | N chairs and no beans, for the empty-chair shots (`--shot empty-wide`, `empty-push`, `empty-orbit`, `empty-crane`, `empty-chair`) |
 
-Game recordings also write `out.cues` with when the music plays and stops.
+Game recordings also write `out.cues` with when the music plays and stops and every game event.
 `uv run --project ../supertune python tools/music.py out.mp4` scores the clip
 with toy-instrument versions of the Can-can and In the Hall of the Mountain
-King, cut on the real stops, and saves the track as `out.wav`. It needs a
+King, cut on the real stops, adds sound effects for shoves, hits, sits, launches and the win, and saves the track as `out.wav`. It needs a
 supertune checkout next to this one.
 
 `chairs_sim` plays games headless at about half a million steps a second and

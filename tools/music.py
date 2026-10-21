@@ -89,13 +89,59 @@ def cues(path):
         if r[0] == "play":
             stop = next(float(s[1]) for s in rows[i + 1:] if s[0] in ("stop", "end"))
             spans.append((float(r[1]), stop, float(r[2]), int(r[3]), int(r[4])))
-    return spans, end
+    return spans, end, rows
+
+
+def _voice(i):
+    return 0.85 + (i * 0.618 % 1) * 0.5, (i * 0.37 % 1) * 1.2 - 0.6
+
+
+def effects(rows):
+    events, last = [], {}
+    launched = [(float(r[1]), int(r[3])) for r in rows if r[0] == "ev" and r[2] == "8"]
+    for n, r in enumerate(rows):
+        if r[0] not in ("ev", "jump", "twinkle"):
+            continue
+        t = float(r[1])
+        kind = r[2] if r[0] == "ev" else r[0]
+        who = int(r[3] if r[0] == "ev" else r[2])
+        pitch, pan = _voice(who)
+        if kind in ("jump", "2") and t - last.get((kind, who), -1) < 0.25:
+            continue
+        last[(kind, who)] = t
+        if kind == "jump":
+            events.append((t, toys.boing(pitch, 0.4, seed=n), 0.12, pan))
+        elif kind == "twinkle":
+            events.append((t, toys.twinkle(0.6, seed=n), 0.3, pan))
+        elif kind == "0" and t > 0.5:
+            for k in range(3):
+                events.append((t + 0.04 * k, toys.pop(0.6, seed=n + k), 0.3, (k - 1) * 0.4))
+        elif kind == "2":
+            events.append((t, toys.whoosh(0.6, seed=n), 0.25, pan))
+        elif kind == "3":
+            events.append((t, toys.bonk(pitch, 0.8, seed=n), 0.5, pan))
+        elif kind == "4":
+            events.append((t, toys.plop(0.8, seed=n), 0.45, pan))
+        elif kind == "5":
+            events.append((t, toys.bonk(pitch * 0.8, 1.0, seed=n), 0.6, pan))
+            events.append((t + 0.05, toys.slide(1100, 320, 0.45, seed=n), 0.25, pan))
+        elif kind == "6":
+            events.append((t, toys.glockenspiel(88, 0.6, seed=n), 0.35, pan))
+        elif kind == "7":
+            events.append((t, toys.whistle(0.6, seed=n), 0.35, 0.0))
+        elif kind == "8":
+            crowd = sum(abs(a - t) < 0.05 for a, _ in launched)
+            events.append((t, toys.whoosh(0.9, seed=n), 0.4, pan))
+            events.append((t + 0.08, toys.scream(pitch, seed=n), 0.6 / np.sqrt(crowd), pan))
+        elif kind == "10":
+            events.append((t, toys.fanfare(0.8, seed=n), 0.55, 0.0))
+    return events
 
 
 def render(video):
     video = Path(video)
-    spans, end = cues(video.with_suffix(".cues"))
-    out = np.zeros((int(end * toys.SR) + 1, 2), np.float32)
+    spans, end, rows = cues(video.with_suffix(".cues"))
+    out = toys.mix(effects(rows), end)
     for n, (a, b, offset, rnd, alive) in enumerate(spans):
         song = HALL if alive <= 2 else CANCAN
         events = []

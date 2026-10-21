@@ -320,6 +320,7 @@ int main(int argc, char** argv) {
         cues = std::fopen((path.substr(0, dot) + ".cues").c_str(), "w");
     }
     int captured = 0;
+    std::vector<char> airborne, gone;
     bool playing = false;
 
     std::vector<float> shown;
@@ -342,6 +343,21 @@ int main(int argc, char** argv) {
             } else if (game) {
                 for (size_t i = 0; i < bots.size(); ++i) inputs[i] = bots[i].think(*game, static_cast<int>(i), botRandom);
                 game->step(inputs);
+                if (cues && (recordRounds.empty() ||
+                             std::find(recordRounds.begin(), recordRounds.end(), game->round) != recordRounds.end())) {
+                    const double t = (captured - static_cast<double>(substeps - 1 - step) / substeps) / 60.0;
+                    for (const Event& e : game->events) std::fprintf(cues, "ev %.4f %d %d %d\n", t, static_cast<int>(e.kind), e.a, e.b);
+                    airborne.resize(game->beans.size());
+                    gone.resize(game->beans.size());
+                    for (size_t i = 0; i < game->beans.size(); ++i) {
+                        const Contestant& c = game->beans[i];
+                        const bool up = !c.grounded && c.velocity.y > 1.0f;
+                        if (up && !airborne[i] && c.alive) std::fprintf(cues, "jump %.4f %zu\n", t, i);
+                        airborne[i] = !c.grounded;
+                        if (meadow.beans[i].hidden && !gone[i]) std::fprintf(cues, "twinkle %.4f %zu\n", t, i);
+                        gone[i] = meadow.beans[i].hidden;
+                    }
+                }
                 view->sync(dt);
                 meadow.update(dt);
             } else {
