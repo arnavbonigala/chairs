@@ -1,0 +1,121 @@
+import subprocess
+import sys
+from pathlib import Path
+
+import numpy as np
+import soundfile as sf
+
+from supertune import toys
+
+LETTER = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+
+def midi(name):
+    pc = LETTER[name[0]] + name[1:-1].count("#") - name[1:-1].count("b")
+    return 12 * (int(name[-1]) + 1) + pc
+
+
+def notes(text):
+    out, beat = [], 0.0
+    for tok in text.split():
+        name, dur = tok.split(":")
+        if name != "r":
+            out.append((beat, float(dur), midi(name)))
+        beat += float(dur)
+    return out, beat
+
+
+CANCAN_A = "C5:2 D5:.5 F5:.5 E5:.5 D5:.5 G5:1 G5:1 G5:.5 A5:.5 E5:.5 F5:.5 D5:1 D5:1 D5:.5 F5:.5 E5:.5 D5:.5"
+CANCAN = {
+    "bpm": 264,
+    "melody": " ".join([CANCAN_A, "C5:.5 C6:.5 B5:.5 A5:.5 G5:.5 F5:.5 E5:.5 D5:.5",
+                        CANCAN_A, "C5:.5 G5:.5 D5:.5 E5:.5 C5:1 r:1"]),
+    "bass": ["C3 G2", "C3 G2", "G2 D3", "G2 D3", "C3 G2", "C3 G2", "G2 D3", "G2 C3"],
+    "chords": ["C4 E4 G4", "C4 E4 G4", "B3 D4 F4", "B3 D4 F4", "C4 E4 G4", "C4 E4 G4", "B3 D4 F4", "B3 D4 F4|C4 E4 G4"],
+}
+
+HALL_A = "B4:.5 C#5:.5 D5:.5 E5:.5 F#5:.5 D5:.5 F#5:1 F5:.5 C#5:.5 F5:1 E5:.5 C5:.5 E5:1"
+HALL_B = "B4:.5 C#5:.5 D5:.5 E5:.5 F#5:.5 D5:.5 F#5:.5 B5:.5 A5:.5 F#5:.5 D5:.5 F#5:.5 A5:2"
+HALL = {
+    "bpm": 220,
+    "melody": " ".join([HALL_A, HALL_B]),
+    "bass": ["B2 F#2 B2 F#2", "C#3 C#3 C3 C3", "B2 F#2 B2 F#2", "D3 A2 D3 r"],
+    "chords": None,
+}
+
+
+def arrange(song, start, length, speed, events, seed):
+    bpm = song["bpm"] * speed
+    beat_s = 60.0 / bpm
+    mel, loop_beats = notes(song["melody"])
+    loop_s = loop_beats * beat_s
+    rng = np.random.default_rng(seed)
+    reps = int(length / loop_s) + 2
+    for k in range(reps):
+        base = start + k * loop_s
+        up = 12 if k % 2 else 0
+        for b, _, m in mel:
+            t = base + b * beat_s
+            if t - start >= length:
+                break
+            v = rng.uniform(0.75, 0.9)
+            events.append((t, toys.toy_piano(m + up, v, seed=len(events)), 0.55, 0.0))
+            events.append((t, toys.glockenspiel(m + 12, v, seed=len(events)), 0.2, 0.35))
+        for bar, line in enumerate(song["bass"]):
+            hits = line.split()
+            step = 4 / len(hits) if song["chords"] is None else 2
+            for i, name in enumerate(hits):
+                if name != "r":
+                    events.append((base + (bar * 4 + i * step) * beat_s, toys.marimba(midi(name), 0.9, seed=len(events)), 0.7, -0.25))
+            if song["chords"]:
+                parts = song["chords"][bar].split("|")
+                for i, off in enumerate((1, 3)):
+                    chord = parts[min(i, len(parts) - 1)]
+                    for name in chord.split():
+                        events.append((base + (bar * 4 + off) * beat_s, toys.toy_piano(midi(name), 0.45, seed=len(events)), 0.25, -0.1))
+            for i in range(8):
+                t = base + (bar * 4 + i * 0.5) * beat_s
+                if i % 2:
+                    events.append((t, toys.shaker(0.5, seed=len(events)), 0.25, 0.4))
+                if i in (2, 6):
+                    events.append((t, toys.woodblock(0.7, seed=len(events)), 0.35, 0.2))
+
+
+def cues(path):
+    rows = [line.split() for line in Path(path).read_text().splitlines()]
+    end = float(rows[-1][1])
+    spans = []
+    for i, r in enumerate(rows):
+        if r[0] == "play":
+            stop = next(float(s[1]) for s in rows[i + 1:] if s[0] in ("stop", "end"))
+            spans.append((float(r[1]), stop, float(r[2]), int(r[3]), int(r[4])))
+    return spans, end
+
+
+def render(video):
+    video = Path(video)
+    spans, end = cues(video.with_suffix(".cues"))
+    out = np.zeros((int(end * toys.SR) + 1, 2), np.float32)
+    for n, (a, b, offset, rnd, alive) in enumerate(spans):
+        song = HALL if alive <= 2 else CANCAN
+        events = []
+        arrange(song, a - offset, b - a + offset, 1.0 + 0.05 * (rnd - 1), events, n)
+        seg = toys.mix(events, end)
+        i, j = int(a * toys.SR), int(b * toys.SR)
+        fade = int(0.006 * toys.SR)
+        seg[:i] = 0
+        seg[j:] = 0
+        seg[j - fade:j] *= np.linspace(1, 0, fade)[:, None]
+        out += seg
+    wav = video.with_suffix(".wav")
+    sf.write(wav, toys.master(out), toys.SR, subtype="PCM_24")
+    tmp = video.with_name(video.stem + ".tmp.mp4")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(video), "-i", str(wav), "-map", "0:v", "-map", "1:a",
+                    "-c:v", "copy", "-c:a", "aac", "-b:a", "320k", str(tmp)], check=True)
+    tmp.replace(video)
+    print(f"{video}: {len(spans)} music spans, {wav.name}")
+
+
+if __name__ == "__main__":
+    for v in sys.argv[1:]:
+        render(v)

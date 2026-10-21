@@ -37,13 +37,14 @@ std::vector<int> parseCast(const std::string& cast, int players, uint64_t seed) 
 int main(int argc, char** argv) {
     int players = 6, games = 20;
     uint64_t seed = 1;
-    bool verbose = false;
+    bool verbose = false, gen0 = false;
     std::string cast;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--players") && i + 1 < argc) players = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "--games") && i + 1 < argc) games = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "--seed") && i + 1 < argc) seed = std::strtoull(argv[++i], nullptr, 10);
         else if (!std::strcmp(argv[i], "--cast") && i + 1 < argc) cast = argv[++i];
+        else if (!std::strcmp(argv[i], "--gen0")) gen0 = true;
         else if (!std::strcmp(argv[i], "-v")) verbose = true;
     }
     long steps = 0, hits = 0, knocks = 0, fouls = 0;
@@ -51,10 +52,12 @@ int main(int argc, char** argv) {
     for (int g = 0; g < games; ++g) {
         const uint64_t s = seed + static_cast<uint64_t>(g);
         const std::vector<int> ids = parseCast(cast, players, s);
-        Game game(ids, s);
+        Rules rules;
+        rules.ringFoul = rules.stallFoul = !gen0;
+        Game game(ids, s, rules);
         Random rng(s * 1000 + 1);
         std::vector<Bot> bots;
-        for (size_t i = 0; i < ids.size(); ++i) bots.push_back(Bot::random(rng));
+        for (size_t i = 0; i < ids.size(); ++i) bots.push_back(gen0 ? Bot::fresh() : Bot::random(rng));
         std::vector<Input> inputs(ids.size());
         std::string perRound;
         int roundKnocks = 0, roundHits = 0, lastRound = 1;

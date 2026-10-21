@@ -14,8 +14,12 @@ struct Bot {
     int target = -1;
     int lastRound = 0;
     bool reacted = false;
+    bool untrained = false;
+    int hold = 0;
+    Input held;
 
     static Bot random(Random& r);
+    static Bot fresh();
     Input think(const Game& game, int self, Random& r);
 };
 

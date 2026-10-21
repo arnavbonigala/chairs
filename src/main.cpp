@@ -155,6 +155,7 @@ int main(int argc, char** argv) {
     int empty = 0;
     std::vector<int> recordRounds;
     int players = 6;
+    bool gen0 = false;
     float warmup = 0.0f;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--resolution") && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &width, &height);
@@ -175,6 +176,7 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--no-tags")) orbit.tags = false;
         else if (!std::strcmp(argv[i], "--game")) playGame = true;
         else if (!std::strcmp(argv[i], "--players") && i + 1 < argc) players = std::atoi(argv[++i]);
+        else if (!std::strcmp(argv[i], "--gen0")) gen0 = playGame = true;
         else if (!std::strcmp(argv[i], "--cast") && i + 1 < argc) cast = argv[++i];
         else if (!std::strcmp(argv[i], "--focus") && i + 1 < argc) focusName = argv[++i];
         else if (!std::strcmp(argv[i], "--empty") && i + 1 < argc) empty = std::atoi(argv[++i]);
@@ -285,10 +287,12 @@ int main(int argc, char** argv) {
     Random botRandom(seed * 1000 + 1);
     int focus = 0;
     if (playGame) {
-        game = std::make_unique<Game>(castIds, seed);
+        Rules rules;
+        rules.ringFoul = rules.stallFoul = !gen0;
+        game = std::make_unique<Game>(castIds, seed, rules);
         view = std::make_unique<GameView>(meadow, *game);
         renderer.particles = {&view->fx.confetti, &view->fx.sparks};
-        for (size_t i = 0; i < castIds.size(); ++i) bots.push_back(Bot::random(botRandom));
+        for (size_t i = 0; i < castIds.size(); ++i) bots.push_back(gen0 ? Bot::fresh() : Bot::random(botRandom));
         inputs.resize(castIds.size());
         for (size_t i = 0; i < castIds.size(); ++i)
             if (!focusName.empty() && focusName == NAMES[castIds[i]]) focus = static_cast<int>(i);
@@ -309,6 +313,14 @@ int main(int argc, char** argv) {
     if (w <= 0 || h <= 0) glfwGetFramebufferSize(window, &w, &h);
     VideoRecorder recorder;
     if (record && !recorder.open(record, w, h, 60, error)) std::fprintf(stderr, "record: %s\n", error.c_str());
+    FILE* cues = nullptr;
+    if (record && game) {
+        std::string path = record;
+        const size_t dot = path.find_last_of('.');
+        cues = std::fopen((path.substr(0, dot) + ".cues").c_str(), "w");
+    }
+    int captured = 0;
+    bool playing = false;
 
     std::vector<float> shown;
     double last = glfwGetTime();
@@ -381,6 +393,14 @@ int main(int argc, char** argv) {
             overlay.flush(renderer.outputFramebuffer(), w, h);
 
             recorder.capture(renderer.outputFramebuffer());
+            if (cues && (game->phase == Game::Music) != playing) {
+                playing = !playing;
+                if (playing)
+                    std::fprintf(cues, "play %.4f %.4f %d %d\n", captured / 60.0, game->phaseTime, game->round, game->aliveCount());
+                else
+                    std::fprintf(cues, "stop %.4f\n", captured / 60.0);
+            }
+            ++captured;
             renderer.present(windowWidth, windowHeight);
             glfwSwapBuffers(window);
         }
@@ -389,6 +409,10 @@ int main(int argc, char** argv) {
     if (stage && stage->loser >= 0)
         std::printf("loser %s\n", Meadow::beanName(meadow.beans[stage->players[static_cast<size_t>(stage->loser)].bean].id));
     recorder.close();
+    if (cues) {
+        std::fprintf(cues, "end %.4f\n", captured / 60.0);
+        std::fclose(cues);
+    }
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;

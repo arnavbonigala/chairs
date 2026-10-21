@@ -22,10 +22,28 @@ Bot Bot::random(Random& r) {
     return b;
 }
 
+Bot Bot::fresh() {
+    Bot b;
+    b.untrained = true;
+    return b;
+}
+
 Input Bot::think(const Game& game, int self, Random& r) {
     Input in;
     const Contestant& me = game.beans[static_cast<size_t>(self)];
     if (!me.alive) return in;
+    if (untrained) {
+        if (--hold <= 0) {
+            hold = 8;
+            const int dir = static_cast<int>(r.below(9));
+            const float a = static_cast<float>(dir) * 0.785398f;
+            held.moveX = dir == 8 ? 0.0f : std::cos(a);
+            held.moveZ = dir == 8 ? 0.0f : std::sin(a);
+            held.jump = r.chance(0.5f);
+            held.shove = r.chance(0.5f);
+        }
+        return held;
+    }
     if (game.round != lastRound) {
         lastRound = game.round;
         reacted = false;

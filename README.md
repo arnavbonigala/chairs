@@ -53,7 +53,14 @@ cmake --build build -j
 | `--cast "Kevin,Gus"` | pick the players by name |
 | `--shot wide\|top\|low\|chairs\|follow\|action` | game cameras; `--focus Kevin` sets who `follow` tracks |
 | `--rounds 1,5` | record only those rounds |
+| `--gen0` | untrained players that mash random inputs, with fouls off |
 | `--empty N` | N chairs and no beans, for the empty-chair shots (`--shot empty-wide`, `empty-push`, `empty-orbit`, `empty-crane`, `empty-chair`) |
+
+Game recordings also write `out.cues` with when the music plays and stops.
+`uv run --project ../supertune python tools/music.py out.mp4` scores the clip
+with toy-instrument versions of the Can-can and In the Hall of the Mountain
+King, cut on the real stops, and saves the track as `out.wav`. It needs a
+supertune checkout next to this one.
 
 `chairs_sim` plays games headless at about half a million steps a second and
 prints who got hit and knocked off each round: `./build/chairs_sim --seed 56 -v`.
@@ -72,4 +79,5 @@ prints who got hit and knocked off each round: `./build/chairs_sim --seed 56 -v`
 | `src/view.*` | draws a game in the meadow, with its cameras |
 | `src/fx.*` | confetti, sparks, launch trails |
 | `tools/sim.cpp` | headless game runner |
+| `tools/music.py` | scores game recordings from their cues |
 | `src/main.cpp` | window, camera, look settings, recording |
