@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <ctime>
+#include <filesystem>
 
 #include "core/jobs.hpp"
 #include "meadow.hpp"
@@ -14,6 +16,7 @@
 #include "bots.hpp"
 #include "names.hpp"
 #include "view.hpp"
+#include "take.hpp"
 #include "kit.hpp"
 #include "render/gl.hpp"
 #include "render/overlay.hpp"
@@ -38,10 +41,35 @@ struct Orbit {
 
 Orbit orbit;
 
+struct Fly {
+    bool active = false;
+    Vec3 eye;
+    Vec3 velocity;
+    float yaw = 0, pitch = 0, fov = 50.0f;
+    float smoothYaw = 0, smoothPitch = 0, smoothFov = 50.0f;
+    bool paused = false;
+    bool start = false;
+    bool toggleTake = false;
+    bool locked = true;
+    bool haveCursor = false;
+    bool help = false;
+};
+
+Fly fly;
+
 void keyCallback(GLFWwindow* window, int key, int, int action, int) {
     if (action != GLFW_PRESS) return;
     if (key == GLFW_KEY_ESCAPE) glfwSetWindowShouldClose(window, GLFW_TRUE);
-    if (key == GLFW_KEY_SPACE) orbit.spin = !orbit.spin;
+    if (key == GLFW_KEY_SPACE && fly.active) fly.paused = !fly.paused;
+    else if (key == GLFW_KEY_SPACE) orbit.spin = !orbit.spin;
+    if (key == GLFW_KEY_ENTER) fly.start = true;
+    if (key == GLFW_KEY_R) fly.toggleTake = true;
+    if (key == GLFW_KEY_SLASH) fly.help = !fly.help;
+    if (key == GLFW_KEY_TAB && fly.active) {
+        fly.locked = !fly.locked;
+        fly.haveCursor = false;
+        glfwSetInputMode(window, GLFW_CURSOR, fly.locked ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+    }
     if (key == GLFW_KEY_H) orbit.hud = !orbit.hud;
     if (key == GLFW_KEY_N) orbit.tags = !orbit.tags;
 }
@@ -53,7 +81,23 @@ void buttonCallback(GLFWwindow* window, int button, int action, int) {
 }
 
 void cursorCallback(GLFWwindow*, double x, double y) {
+    if (fly.active && fly.locked) {
+        if (!fly.haveCursor) {
+            fly.haveCursor = true;
+            orbit.lastX = x;
+            orbit.lastY = y;
+            return;
+        }
+        orbit.dragging = true;
+    }
     if (!orbit.dragging) return;
+    if (fly.active) {
+        fly.yaw -= static_cast<float>(x - orbit.lastX) * 0.0035f * fly.fov / 50.0f;
+        fly.pitch = std::clamp(fly.pitch - static_cast<float>(y - orbit.lastY) * 0.0035f * fly.fov / 50.0f, -1.5f, 1.5f);
+        orbit.lastX = x;
+        orbit.lastY = y;
+        return;
+    }
     orbit.angle -= static_cast<float>(x - orbit.lastX) * 0.005f;
     orbit.pitch = std::clamp(orbit.pitch + static_cast<float>(y - orbit.lastY) * 0.004f, -0.05f, 1.4f);
     orbit.lastX = x;
@@ -61,6 +105,10 @@ void cursorCallback(GLFWwindow*, double x, double y) {
 }
 
 void scrollCallback(GLFWwindow*, double, double dy) {
+    if (fly.active) {
+        fly.fov = std::clamp(fly.fov * std::pow(0.93f, static_cast<float>(dy)), 12.0f, 90.0f);
+        return;
+    }
     orbit.distance = std::clamp(orbit.distance * std::pow(0.9f, static_cast<float>(dy)), 3.0f, 120.0f);
 }
 
@@ -156,6 +204,9 @@ int main(int argc, char** argv) {
     std::vector<int> recordRounds;
     int players = 6;
     bool gen0 = false;
+    int gen = -1;
+    Take replay;
+    bool replaying = false;
     float warmup = 0.0f;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--resolution") && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &width, &height);
@@ -176,7 +227,16 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--no-tags")) orbit.tags = false;
         else if (!std::strcmp(argv[i], "--game")) playGame = true;
         else if (!std::strcmp(argv[i], "--players") && i + 1 < argc) players = std::atoi(argv[++i]);
-        else if (!std::strcmp(argv[i], "--gen0")) gen0 = playGame = true;
+        else if (!std::strcmp(argv[i], "--gen") && i + 1 < argc) gen = std::atoi(argv[++i]);
+        else if (!std::strcmp(argv[i], "--replay") && i + 1 < argc) {
+            if (!replay.load(argv[++i])) {
+                std::fprintf(stderr, "can't read take %s\n", argv[i]);
+                return 1;
+            }
+            replaying = playGame = true;
+            seed = replay.seed;
+            gen = replay.gen;
+        }
         else if (!std::strcmp(argv[i], "--cast") && i + 1 < argc) cast = argv[++i];
         else if (!std::strcmp(argv[i], "--focus") && i + 1 < argc) focusName = argv[++i];
         else if (!std::strcmp(argv[i], "--empty") && i + 1 < argc) empty = std::atoi(argv[++i]);
@@ -189,8 +249,14 @@ int main(int argc, char** argv) {
             }
         }
     }
-    std::vector<int> castIds;
-    if (playGame) {
+    if (gen > 0) {
+        std::fprintf(stderr, "gen %d isn't trained yet; gens: 0\n", gen);
+        return 1;
+    }
+    if (gen == 0) gen0 = playGame = true;
+    std::vector<int> castIds = replay.cast;
+    if (replaying) players = static_cast<int>(castIds.size());
+    if (playGame && !replaying) {
         size_t start = 0;
         while (!cast.empty() && start <= cast.size()) {
             const size_t comma = cast.find(',', start);
@@ -323,29 +389,107 @@ int main(int argc, char** argv) {
     std::vector<char> airborne, gone;
     bool playing = false;
 
+    const bool interactive = game && !record && shotName.empty() && !replaying;
+    fly.active = interactive;
+    if (interactive) {
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        if (glfwRawMouseMotionSupported()) glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+    }
+    if (interactive) {
+        fly.eye = orbit.focus + Vec3{std::sin(orbit.angle) * std::cos(orbit.pitch), std::sin(orbit.pitch),
+                                     std::cos(orbit.angle) * std::cos(orbit.pitch)} *
+                                    orbit.distance;
+        const Vec3 d = normalize(orbit.focus - fly.eye);
+        fly.yaw = fly.smoothYaw = std::atan2(d.x, d.z);
+        fly.pitch = fly.smoothPitch = std::asin(d.y);
+    }
+    const float stepDt = 1.0f / 240.0f;
+    long stepsDone = 0;
+    bool holding = interactive;
+    int heldRound = 1;
+    double accumulator = 0;
+    Take take;
+    bool taking = false;
+    double takeStart = 0;
+    std::string takePath;
+    const double replayEnd = replay.length();
+
+    auto inRounds = [&]() {
+        return recordRounds.empty() || std::find(recordRounds.begin(), recordRounds.end(), game->round) != recordRounds.end();
+    };
+    auto finishTake = [&]() {
+        if (!taking) return;
+        taking = false;
+        std::filesystem::create_directories("takes");
+        if (take.save(takePath)) std::printf("saved %s (%.1f s)\n", takePath.c_str(), take.length());
+        else std::fprintf(stderr, "couldn't write %s\n", takePath.c_str());
+        std::fflush(stdout);
+    };
+
     std::vector<float> shown;
     double last = glfwGetTime();
-    float time = 0, sinceRender = 0;
+    float time = 0;
     for (int frame = 0; !glfwWindowShouldClose(window) && (frames <= 0 || frame < frames); ++frame) {
-        if (game && game->phase == Game::Over && view->overTime() > 4.0f && record) break;
+        if (game && game->phase == Game::Over && view->overTime() > 4.0f && record && !replaying) break;
+        if (replaying && frame / 60.0 > replayEnd) break;
         if (game && record && !recordRounds.empty() && game->round > *std::max_element(recordRounds.begin(), recordRounds.end())) break;
         double now = glfwGetTime();
         const float frameDt = record ? 1.0f / 60.0f : static_cast<float>(std::min(now - last, 0.1));
         last = now;
         glfwPollEvents();
-        for (int step = 0; step < substeps; ++step) {
-            const float dt = frameDt / static_cast<float>(substeps);
-            time += dt;
-            sinceRender += dt;
-            if (orbit.spin && !shot && !stage) orbit.angle += dt * 0.08f;
-            if (stage) {
-                stage->update(dt);
-            } else if (game) {
+
+        int steps = 0;
+        float idle = 0;
+        char mode = 'r';
+        TakeFrame shotFrame;
+        if (replaying) {
+            shotFrame = replay.at(frame / 60.0);
+            steps = static_cast<int>(std::max(0L, shotFrame.steps - stepsDone));
+            mode = shotFrame.mode;
+            if (mode == 'h') idle = frameDt;
+            orbit.tags = shotFrame.tags;
+        } else if (interactive) {
+            if (fly.start) holding = fly.paused = false;
+            fly.start = false;
+            if (fly.toggleTake) {
+                fly.toggleTake = false;
+                if (taking) {
+                    finishTake();
+                } else {
+                    char stamp[32];
+                    const std::time_t clock = std::time(nullptr);
+                    std::strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", std::localtime(&clock));
+                    takePath = "takes/gen" + std::to_string(gen0 ? 0 : -1) + "-seed" + std::to_string(seed) + "-" + stamp + ".take";
+                    take = Take{};
+                    take.seed = seed;
+                    take.gen = gen0 ? 0 : -1;
+                    take.cast = castIds;
+                    taking = true;
+                    takeStart = now;
+                }
+            }
+            if (fly.paused) {
+                mode = 'p';
+            } else if (holding) {
+                mode = 'h';
+                idle = frameDt;
+            } else {
+                accumulator += frameDt / stepDt;
+                steps = std::min(static_cast<int>(accumulator), 24);
+                accumulator -= static_cast<int>(accumulator);
+            }
+        } else if (game) {
+            steps = substeps;
+        }
+
+        if (game) {
+            for (int step = 0; step < steps; ++step) {
                 for (size_t i = 0; i < bots.size(); ++i) inputs[i] = bots[i].think(*game, static_cast<int>(i), botRandom);
                 game->step(inputs);
-                if (cues && (recordRounds.empty() ||
-                             std::find(recordRounds.begin(), recordRounds.end(), game->round) != recordRounds.end())) {
-                    const double t = (captured - static_cast<double>(substeps - 1 - step) / substeps) / 60.0;
+                ++stepsDone;
+                time += stepDt;
+                if (cues && inRounds() && !(replaying && frame == 0)) {
+                    const double t = (captured - static_cast<double>(steps - 1 - step) / steps) / 60.0;
                     for (const Event& e : game->events) std::fprintf(cues, "ev %.4f %d %d %d\n", t, static_cast<int>(e.kind), e.a, e.b);
                     airborne.resize(game->beans.size());
                     gone.resize(game->beans.size());
@@ -358,69 +502,131 @@ int main(int argc, char** argv) {
                         gone[i] = meadow.beans[i].hidden;
                     }
                 }
-                view->sync(dt);
-                meadow.update(dt);
-            } else {
-                meadow.update(dt);
+                view->sync(stepDt);
+                meadow.update(stepDt);
+                if (interactive && game->round != heldRound && game->phase == Game::Music) {
+                    heldRound = game->round;
+                    holding = true;
+                    accumulator = 0;
+                    break;
+                }
             }
+            if (idle > 0) {
+                meadow.update(idle);
+                time += idle;
+            }
+        } else {
+            for (int step = 0; step < substeps; ++step) {
+                const float dt = frameDt / static_cast<float>(substeps);
+                time += dt;
+                if (orbit.spin && !shot && !stage) orbit.angle += dt * 0.08f;
+                if (stage) stage->update(dt);
+                else meadow.update(dt);
+            }
+        }
+        if (game && !inRounds()) continue;
 
-            const bool wanted = !game || recordRounds.empty() ||
-                                std::find(recordRounds.begin(), recordRounds.end(), game->round) != recordRounds.end();
-            if (step != substeps - 1 || !wanted) continue;
-
-            int windowWidth = 0, windowHeight = 0;
-            glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
-            if (width <= 0 || height <= 0) {
+        int windowWidth = 0, windowHeight = 0;
+        glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
+        if (width <= 0 || height <= 0) {
+            if (interactive) glfwGetWindowSize(window, &w, &h);
+            else {
                 w = windowWidth;
                 h = windowHeight;
             }
-            renderer.resize(w, h);
-            renderer.options.time = time;
-
-            Vec3 eye = orbit.focus + Vec3{std::sin(orbit.angle) * std::cos(orbit.pitch), std::sin(orbit.pitch),
-                                          std::cos(orbit.angle) * std::cos(orbit.pitch)} *
-                                         orbit.distance;
-            Vec3 target = orbit.focus;
-            float fov = 50.0f;
-            CameraKey k;
-            if (shot) k = shot->at(time);
-            if (shot || (stage && !shotName.empty() && stage->camera(shotName, k)) ||
-                (view && !shotName.empty() && view->camera(shotName, focus, k))) {
-                eye = k.eye;
-                target = k.target;
-                fov = k.fov;
-            }
-            const Mat4 view = lookAt(eye, target, Vec3{0, 1, 0});
-            const Mat4 projection = perspective(radians(fov), static_cast<float>(w) / static_cast<float>(h), 0.1f, 600.0f);
-            renderer.render(meadow.scene, meadow.assets, view, projection, eye, &jobs);
-
-            if (orbit.tags && overlay.font().loaded())
-                nametags(overlay, meadow, projection * view, eye, w, h, sinceRender, shown);
-            sinceRender = 0;
-            if (orbit.hud && overlay.font().loaded()) {
-                const RenderStats& s = renderer.stats();
-                char text[256];
-                std::snprintf(text, sizeof(text), "%.2f ms gpu  %u draws  %u / %u visible  %.1fM tris", s.gpuMs,
-                              s.drawCalls + s.shadowDrawCalls, s.visible, s.candidates,
-                              static_cast<double>(s.triangles) * 1e-6);
-                const float scale = static_cast<float>(h) / 1080.0f;
-                overlay.text(text, 24 * scale, 24 * scale, 26 * scale, Vec4{1, 1, 1, 1}, 3 * scale);
-            }
-            overlay.flush(renderer.outputFramebuffer(), w, h);
-
-            recorder.capture(renderer.outputFramebuffer());
-            if (cues && (game->phase == Game::Music) != playing) {
-                playing = !playing;
-                if (playing)
-                    std::fprintf(cues, "play %.4f %.4f %d %d\n", captured / 60.0, game->phaseTime, game->round, game->aliveCount());
-                else
-                    std::fprintf(cues, "stop %.4f\n", captured / 60.0);
-            }
-            ++captured;
-            renderer.present(windowWidth, windowHeight);
-            glfwSwapBuffers(window);
         }
+        renderer.resize(w, h);
+        renderer.options.time = time;
+
+        Vec3 eye = orbit.focus + Vec3{std::sin(orbit.angle) * std::cos(orbit.pitch), std::sin(orbit.pitch),
+                                      std::cos(orbit.angle) * std::cos(orbit.pitch)} *
+                                     orbit.distance;
+        Vec3 target = orbit.focus;
+        float fov = 50.0f;
+        CameraKey k;
+        if (shot) k = shot->at(time);
+        if (replaying) {
+            eye = shotFrame.eye;
+            target = shotFrame.target;
+            fov = shotFrame.fov;
+        } else if (fly.active) {
+            const float ease = 1.0f - std::exp(-frameDt * 10.0f);
+            fly.smoothYaw += (fly.yaw - fly.smoothYaw) * ease;
+            fly.smoothPitch += (fly.pitch - fly.smoothPitch) * ease;
+            fly.smoothFov += (fly.fov - fly.smoothFov) * ease;
+            const Vec3 forward{std::sin(fly.smoothYaw) * std::cos(fly.smoothPitch), std::sin(fly.smoothPitch),
+                               std::cos(fly.smoothYaw) * std::cos(fly.smoothPitch)};
+            const Vec3 right = normalize(cross(forward, Vec3{0, 1, 0}));
+            auto key = [&](int k) { return glfwGetKey(window, k) == GLFW_PRESS ? 1.0f : 0.0f; };
+            Vec3 want = forward * (key(GLFW_KEY_W) - key(GLFW_KEY_S)) + right * (key(GLFW_KEY_D) - key(GLFW_KEY_A)) +
+                        Vec3{0, 1, 0} * (key(GLFW_KEY_E) - key(GLFW_KEY_Q));
+            float speed = 5.0f;
+            if (key(GLFW_KEY_LEFT_SHIFT) > 0) speed *= 3.0f;
+            if (key(GLFW_KEY_LEFT_ALT) > 0 || key(GLFW_KEY_LEFT_CONTROL) > 0) speed *= 0.25f;
+            if (length(want) > 1e-3f) want = normalize(want) * speed;
+            fly.velocity = fly.velocity + (want - fly.velocity) * (1.0f - std::exp(-frameDt * 6.0f));
+            fly.eye = fly.eye + fly.velocity * frameDt;
+            fly.eye.y = std::max(fly.eye.y, meadow.height(fly.eye.x, fly.eye.z) + 0.25f);
+            eye = fly.eye;
+            target = fly.eye + forward;
+            fov = fly.smoothFov;
+        } else if (shot || (stage && !shotName.empty() && stage->camera(shotName, k)) ||
+                   (view && !shotName.empty() && view->camera(shotName, focus, k))) {
+            eye = k.eye;
+            target = k.target;
+            fov = k.fov;
+        }
+        const Mat4 view = lookAt(eye, target, Vec3{0, 1, 0});
+        const Mat4 projection = perspective(radians(fov), static_cast<float>(w) / static_cast<float>(h), 0.1f, 600.0f);
+        renderer.render(meadow.scene, meadow.assets, view, projection, eye, &jobs);
+
+        if (orbit.tags && overlay.font().loaded()) nametags(overlay, meadow, projection * view, eye, w, h, frameDt, shown);
+        const float scale = static_cast<float>(h) / 1080.0f;
+        if (orbit.hud && overlay.font().loaded()) {
+            const RenderStats& s = renderer.stats();
+            char text[256];
+            std::snprintf(text, sizeof(text), "%.2f ms gpu  %u draws  %u / %u visible  %.1fM tris", s.gpuMs,
+                          s.drawCalls + s.shadowDrawCalls, s.visible, s.candidates,
+                          static_cast<double>(s.triangles) * 1e-6);
+            overlay.text(text, 24 * scale, 24 * scale, 26 * scale, Vec4{1, 1, 1, 1}, 3 * scale);
+        }
+        if (interactive && overlay.font().loaded()) {
+            char text[128];
+            float y = 60 * scale;
+            if (taking) {
+                const int secs = static_cast<int>(now - takeStart);
+                std::snprintf(text, sizeof(text), "REC %d:%02d", secs / 60, secs % 60);
+                overlay.text(text, 24 * scale, y, 34 * scale, Vec4{1.0f, 0.25f, 0.2f, 1}, 4 * scale);
+                y += 44 * scale;
+            }
+            if (fly.paused) {
+                overlay.text("PAUSED", 24 * scale, y, 30 * scale, Vec4{1, 1, 1, 1}, 4 * scale);
+                y += 40 * scale;
+            } else if (holding) {
+                std::snprintf(text, sizeof(text), fly.help ? "Enter starts round %d" : "Enter starts round %d   (? for controls)", game->round);
+                overlay.text(text, 24 * scale, y, 30 * scale, Vec4{1, 0.95f, 0.6f, 1}, 4 * scale);
+                y += 40 * scale;
+            }
+            if (fly.help)
+                overlay.text("WASD move  Q/E down/up  mouse look  Tab free cursor  scroll zoom  Shift fast  Alt slow  Enter start round  Space pause  R record  N names  ? hide help",
+                         24 * scale, static_cast<float>(h) - 40 * scale, 20 * scale, Vec4{1, 1, 1, 0.85f}, 3 * scale);
+        }
+        overlay.flush(renderer.outputFramebuffer(), w, h);
+
+        if (taking) take.frames.push_back(TakeFrame{now - takeStart, stepsDone, mode, eye, target, fov, orbit.tags});
+        recorder.capture(renderer.outputFramebuffer());
+        if (cues && (game->phase == Game::Music && steps > 0) != playing) {
+            playing = !playing;
+            if (playing)
+                std::fprintf(cues, "play %.4f %.4f %d %d\n", captured / 60.0, game->phaseTime, game->round, game->aliveCount());
+            else
+                std::fprintf(cues, "stop %.4f\n", captured / 60.0);
+        }
+        ++captured;
+        renderer.present(windowWidth, windowHeight);
+        glfwSwapBuffers(window);
     }
+    finishTake();
     if (game && game->winner >= 0) std::printf("winner %s after %d rounds\n", NAMES[castIds[static_cast<size_t>(game->winner)]], game->round);
     if (stage && stage->loser >= 0)
         std::printf("loser %s\n", Meadow::beanName(meadow.beans[stage->players[static_cast<size_t>(stage->loser)].bean].id));

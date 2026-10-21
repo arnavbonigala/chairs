@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--games") && i + 1 < argc) games = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "--seed") && i + 1 < argc) seed = std::strtoull(argv[++i], nullptr, 10);
         else if (!std::strcmp(argv[i], "--cast") && i + 1 < argc) cast = argv[++i];
-        else if (!std::strcmp(argv[i], "--gen0")) gen0 = true;
+        else if (!std::strcmp(argv[i], "--gen") && i + 1 < argc) gen0 = std::atoi(argv[++i]) == 0;
         else if (!std::strcmp(argv[i], "-v")) verbose = true;
     }
     long steps = 0, hits = 0, knocks = 0, fouls = 0;

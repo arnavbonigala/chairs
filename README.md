@@ -53,8 +53,17 @@ cmake --build build -j
 | `--cast "Kevin,Gus"` | pick the players by name |
 | `--shot wide\|top\|low\|chairs\|follow\|action` | game cameras; `--focus Kevin` sets who `follow` tracks |
 | `--rounds 1,5` | record only those rounds |
-| `--gen0` | untrained players that mash random inputs, with fouls off |
+| `--gen 0` | generation 0: untrained players that mash random inputs, with fouls off |
+| `--replay take` | render a saved take, use with `--record` and `--resolution` |
 | `--empty N` | N chairs and no beans, for the empty-chair shots (`--shot empty-wide`, `empty-push`, `empty-orbit`, `empty-crane`, `empty-chair`) |
+
+Running a game without `--shot` or `--record` puts you behind a free camera:
+WASD to move, Q and E for down and up, the mouse to look (Tab frees the cursor),
+scroll to zoom, Shift to go fast and Alt to go slow. The game holds before each
+round until you press Enter, and Space freezes everything but the camera. R
+starts and stops a take, saved to `takes/` with your camera path and the game's
+timing. `tools/render-takes.sh` renders every new take in 4K with music and
+sound. Press ? for the controls on screen.
 
 Game recordings also write `out.cues` with when the music plays and stops and every game event.
 `uv run --project ../supertune python tools/music.py out.mp4` scores the clip
@@ -80,4 +89,6 @@ prints who got hit and knocked off each round: `./build/chairs_sim --seed 56 -v`
 | `src/fx.*` | confetti, sparks, launch trails |
 | `tools/sim.cpp` | headless game runner |
 | `tools/music.py` | scores game recordings from their cues |
+| `tools/render-takes.sh` | renders saved takes in 4K |
+| `src/take.*` | saving, loading and sampling camera takes |
 | `src/main.cpp` | window, camera, look settings, recording |
