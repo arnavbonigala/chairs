@@ -54,6 +54,7 @@ cmake --build build -j
 | `--shot wide\|top\|low\|chairs\|follow\|action` | game cameras; `--focus Kevin` sets who `follow` tracks |
 | `--rounds 1,5` | record only those rounds |
 | `--gen 0` | generation 0: untrained players that mash random inputs, with fouls off |
+| `--gen N` | players run trained generation N from `gens/` (set `CHAIRS_GENS` to look elsewhere) |
 | `--replay take` | render a saved take, use with `--record` and `--resolution` |
 | `--empty N` | N chairs and no beans, for the empty-chair shots (`--shot empty-wide`, `empty-push`, `empty-orbit`, `empty-crane`, `empty-chair`) |
 
@@ -70,6 +71,27 @@ Game recordings also write `out.cues` with when the music plays and stops and ev
 with toy-instrument versions of the Can-can and In the Hall of the Mountain
 King, cut on the real stops, adds sound effects for shoves, hits, sits, launches and the win, and saves the track as `out.wav`. It needs a
 supertune checkout next to this one.
+
+## Training
+
+The beans learn by self-play with PPO. `chairs_env` is a shared library that
+steps many games at once across every core, and `train/train.py` drives it from
+PyTorch. Observations and actions live in `src/brain.*`, so the trainer and the
+app always agree on them. Every bean sees itself, its 8 nearest rivals and its 6
+nearest chairs in a frame that turns with it around the ring. It picks a move
+direction, whether to jump and whether to shove, 30 times a second. Surviving a
+round is worth +1, elimination -1 and the win +2.
+
+Training starts with fouls off and turns them on once the beans fill most of
+the chairs. Each saved generation goes to `gens/genN.bin` with a `genN.json`
+next to it recording its rules and stats. Gens come every 25 updates at first,
+and the gap doubles every 20 gens.
+
+```
+cmake --build build -j
+cd train && uv run python train.py            # --resume picks up from train/checkpoint.pt
+./build/chairs_sim --gen 12 --vs 4 --players 10 --games 500 -q
+```
 
 `chairs_sim` plays games headless at about half a million steps a second and
 prints who got hit and knocked off each round: `./build/chairs_sim --seed 56 -v`.
@@ -91,4 +113,7 @@ prints who got hit and knocked off each round: `./build/chairs_sim --seed 56 -v`
 | `tools/music.py` | scores game recordings from their cues |
 | `tools/render-takes.sh` | renders saved takes in 4K |
 | `src/take.*` | saving, loading and sampling camera takes |
+| `src/brain.*` | observations, actions and the policy network for trained gens |
+| `src/env.cpp` | the batched training environment, as a C library |
+| `train/` | the PPO trainer |
 | `src/main.cpp` | window, camera, look settings, recording |

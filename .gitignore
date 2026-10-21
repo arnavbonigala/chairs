@@ -4,3 +4,9 @@ renders/
 *.wav
 *.cues
 takes/
+train/.venv/
+train/checkpoint.pt
+train/*.dylib
+train/train.out
+__pycache__/
+train/log.csv

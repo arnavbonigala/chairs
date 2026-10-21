@@ -28,10 +28,23 @@ Bot Bot::fresh() {
     return b;
 }
 
+Bot Bot::trained(const brain::Policy& policy) {
+    Bot b;
+    b.policy = &policy;
+    return b;
+}
+
 Input Bot::think(const Game& game, int self, Random& r) {
     Input in;
     const Contestant& me = game.beans[static_cast<size_t>(self)];
     if (!me.alive) return in;
+    if (policy) {
+        if (--hold <= 0) {
+            hold = brain::REPEAT;
+            held = policy->decide(game, self, r);
+        }
+        return held;
+    }
     if (untrained) {
         if (--hold <= 0) {
             hold = 8;

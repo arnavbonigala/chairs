@@ -249,9 +249,15 @@ int main(int argc, char** argv) {
             }
         }
     }
+    brain::Policy policy;
+    bool genFouls = true;
     if (gen > 0) {
-        std::fprintf(stderr, "gen %d isn't trained yet; gens: 0\n", gen);
-        return 1;
+        std::string error;
+        if (!loadGen(gen, policy, genFouls, error)) {
+            std::fprintf(stderr, "%s\n", error.c_str());
+            return 1;
+        }
+        playGame = true;
     }
     if (gen == 0) gen0 = playGame = true;
     std::vector<int> castIds = replay.cast;
@@ -354,11 +360,11 @@ int main(int argc, char** argv) {
     int focus = 0;
     if (playGame) {
         Rules rules;
-        rules.ringFoul = rules.stallFoul = !gen0;
+        rules.ringFoul = rules.stallFoul = !gen0 && genFouls;
         game = std::make_unique<Game>(castIds, seed, rules);
         view = std::make_unique<GameView>(meadow, *game);
         renderer.particles = {&view->fx.confetti, &view->fx.sparks};
-        for (size_t i = 0; i < castIds.size(); ++i) bots.push_back(gen0 ? Bot::fresh() : Bot::random(botRandom));
+        for (size_t i = 0; i < castIds.size(); ++i) bots.push_back(gen > 0 ? Bot::trained(policy) : gen0 ? Bot::fresh() : Bot::random(botRandom));
         inputs.resize(castIds.size());
         for (size_t i = 0; i < castIds.size(); ++i)
             if (!focusName.empty() && focusName == NAMES[castIds[i]]) focus = static_cast<int>(i);
@@ -459,10 +465,10 @@ int main(int argc, char** argv) {
                     char stamp[32];
                     const std::time_t clock = std::time(nullptr);
                     std::strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", std::localtime(&clock));
-                    takePath = "takes/gen" + std::to_string(gen0 ? 0 : -1) + "-seed" + std::to_string(seed) + "-" + stamp + ".take";
+                    takePath = "takes/" + (gen >= 0 ? "gen" + std::to_string(gen) : std::string("bots")) + "-seed" + std::to_string(seed) + "-" + stamp + ".take";
                     take = Take{};
                     take.seed = seed;
-                    take.gen = gen0 ? 0 : -1;
+                    take.gen = gen;
                     take.cast = castIds;
                     taking = true;
                     takeStart = now;

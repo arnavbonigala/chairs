@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 
+#include "brain.hpp"
 #include "game.hpp"
 
 namespace chairs {
@@ -17,9 +18,11 @@ struct Bot {
     bool untrained = false;
     int hold = 0;
     Input held;
+    const brain::Policy* policy = nullptr;
 
     static Bot random(Random& r);
     static Bot fresh();
+    static Bot trained(const brain::Policy& policy);
     Input think(const Game& game, int self, Random& r);
 };
 

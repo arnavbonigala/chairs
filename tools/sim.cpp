@@ -37,27 +37,43 @@ std::vector<int> parseCast(const std::string& cast, int players, uint64_t seed) 
 int main(int argc, char** argv) {
     int players = 6, games = 20;
     uint64_t seed = 1;
-    bool verbose = false, gen0 = false;
+    bool verbose = false, quiet = false;
+    int gen = -1, vs = -2;
     std::string cast;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--players") && i + 1 < argc) players = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "--games") && i + 1 < argc) games = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "--seed") && i + 1 < argc) seed = std::strtoull(argv[++i], nullptr, 10);
         else if (!std::strcmp(argv[i], "--cast") && i + 1 < argc) cast = argv[++i];
-        else if (!std::strcmp(argv[i], "--gen") && i + 1 < argc) gen0 = std::atoi(argv[++i]) == 0;
+        else if (!std::strcmp(argv[i], "--gen") && i + 1 < argc) gen = std::atoi(argv[++i]);
+        else if (!std::strcmp(argv[i], "--vs") && i + 1 < argc) vs = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "-v")) verbose = true;
+        else if (!std::strcmp(argv[i], "-q")) quiet = true;
     }
+    brain::Policy policies[2];
+    bool genFouls = true, unused = true;
+    std::string error;
+    if ((gen > 0 && !brain::loadGen(gen, policies[0], genFouls, error)) || (vs > 0 && !brain::loadGen(vs, policies[1], unused, error))) {
+        std::fprintf(stderr, "%s\n", error.c_str());
+        return 1;
+    }
+    const bool foulsOn = gen == 0 ? false : gen > 0 ? genFouls : true;
+    auto make = [&](int which, Random& rng) {
+        const int g = which == 0 ? gen : vs;
+        return g > 0 ? Bot::trained(policies[which]) : g == 0 ? Bot::fresh() : Bot::random(rng);
+    };
+    double wins[2] = {0, 0};
     long steps = 0, hits = 0, knocks = 0, fouls = 0;
     const auto start = std::chrono::steady_clock::now();
     for (int g = 0; g < games; ++g) {
         const uint64_t s = seed + static_cast<uint64_t>(g);
         const std::vector<int> ids = parseCast(cast, players, s);
         Rules rules;
-        rules.ringFoul = rules.stallFoul = !gen0;
+        rules.ringFoul = rules.stallFoul = foulsOn;
         Game game(ids, s, rules);
         Random rng(s * 1000 + 1);
         std::vector<Bot> bots;
-        for (size_t i = 0; i < ids.size(); ++i) bots.push_back(gen0 ? Bot::fresh() : Bot::random(rng));
+        for (size_t i = 0; i < ids.size(); ++i) bots.push_back(make(vs > -2 ? static_cast<int>(i % 2) : 0, rng));
         std::vector<Input> inputs(ids.size());
         std::string perRound;
         int roundKnocks = 0, roundHits = 0, lastRound = 1;
@@ -84,10 +100,14 @@ int main(int argc, char** argv) {
             game.events.clear();
         }
         perRound += " r" + std::to_string(lastRound) + ":" + std::to_string(roundHits) + "h" + std::to_string(roundKnocks) + "k";
-        std::printf("seed %llu: %s wins, %d rounds, %.1f s |%s\n", static_cast<unsigned long long>(s),
+        if (game.winner >= 0) wins[vs > -2 ? game.winner % 2 : 0] += 1;
+        if (!quiet) std::printf("seed %llu: %s wins, %d rounds, %.1f s |%s\n", static_cast<unsigned long long>(s),
                     game.winner >= 0 ? NAMES[game.beans[static_cast<size_t>(game.winner)].id] : "nobody", game.round,
                     game.time, perRound.c_str());
     }
+    if (vs > -2)
+        std::printf("gen %d won %.0f, gen %d won %.0f of %d games (%.1f%% vs %.1f%%)\n", gen, wins[0], vs, wins[1], games,
+                    100.0 * wins[0] / games, 100.0 * wins[1] / games);
     const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     std::printf("%ld steps in %.2f s (%.0f steps/s); per game %.1f hits, %.1f knock-offs, %.1f fouls\n", steps, secs,
                 static_cast<double>(steps) / secs, static_cast<double>(hits) / games, static_cast<double>(knocks) / games,
