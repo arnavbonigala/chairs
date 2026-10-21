@@ -95,7 +95,7 @@ void GameView::sync(float dt) {
             case Event::Eliminated:
                 if (a && !a->flying) {
                     a->driven = false;
-                    fx.launch(meadow_, *a);
+                    fx.launch(meadow_, *a, 1.6f);
                 }
                 break;
             case Event::Winner:
