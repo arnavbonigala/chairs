@@ -1,6 +1,6 @@
 {
- "gen": 85,
- "judged": 86,
+ "gen": 92,
+ "judged": 92,
  "history": [
   {
    "gen": 67,
@@ -40,6 +40,26 @@
    "gen": 85,
    "beat": 82,
    "share": 0.65
+  },
+  {
+   "gen": 87,
+   "beat": 85,
+   "share": 0.653
+  },
+  {
+   "gen": 89,
+   "beat": 87,
+   "share": 0.667
+  },
+  {
+   "gen": 90,
+   "beat": 89,
+   "share": 0.567
+  },
+  {
+   "gen": 92,
+   "beat": 90,
+   "share": 0.633
   }
  ]
 }

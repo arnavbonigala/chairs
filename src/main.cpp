@@ -17,6 +17,7 @@
 #include "names.hpp"
 #include "view.hpp"
 #include "take.hpp"
+#include "audio.hpp"
 #include "kit.hpp"
 #include "render/gl.hpp"
 #include "render/overlay.hpp"
@@ -419,6 +420,11 @@ int main(int argc, char** argv) {
     double takeStart = 0;
     std::string takePath;
     const double replayEnd = replay.length();
+    Audio audio;
+    if (interactive) {
+        std::string audioError;
+        if (!audio.init("sounds", audioError)) std::fprintf(stderr, "audio: %s\n", audioError.c_str());
+    }
 
     auto inRounds = [&]() {
         return recordRounds.empty() || std::find(recordRounds.begin(), recordRounds.end(), game->round) != recordRounds.end();
@@ -494,17 +500,27 @@ int main(int argc, char** argv) {
                 game->step(inputs);
                 ++stepsDone;
                 time += stepDt;
-                if (cues && inRounds() && !(replaying && frame == 0)) {
+                const bool logging = cues && inRounds() && !(replaying && frame == 0);
+                if (logging || audio.ready()) {
                     const double t = (captured - static_cast<double>(steps - 1 - step) / steps) / 60.0;
-                    for (const Event& e : game->events) std::fprintf(cues, "ev %.4f %d %d %d\n", t, static_cast<int>(e.kind), e.a, e.b);
+                    for (const Event& e : game->events) {
+                        if (logging) std::fprintf(cues, "ev %.4f %d %d %d\n", t, static_cast<int>(e.kind), e.a, e.b);
+                        audio.event(e, *game);
+                    }
                     airborne.resize(game->beans.size());
                     gone.resize(game->beans.size());
                     for (size_t i = 0; i < game->beans.size(); ++i) {
                         const Contestant& c = game->beans[i];
                         const bool up = !c.grounded && c.velocity.y > 1.0f;
-                        if (up && !airborne[i] && c.alive) std::fprintf(cues, "jump %.4f %zu\n", t, i);
+                        if (up && !airborne[i] && c.alive) {
+                            if (logging) std::fprintf(cues, "jump %.4f %zu\n", t, i);
+                            audio.jump(static_cast<int>(i), game->time);
+                        }
                         airborne[i] = !c.grounded;
-                        if (meadow.beans[i].hidden && !gone[i]) std::fprintf(cues, "twinkle %.4f %zu\n", t, i);
+                        if (meadow.beans[i].hidden && !gone[i]) {
+                            if (logging) std::fprintf(cues, "twinkle %.4f %zu\n", t, i);
+                            audio.twinkle();
+                        }
                         gone[i] = meadow.beans[i].hidden;
                     }
                 }
@@ -521,6 +537,7 @@ int main(int argc, char** argv) {
                 meadow.update(idle);
                 time += idle;
             }
+            audio.music(game->phase == Game::Music && mode == 'r', *game);
         } else {
             for (int step = 0; step < substeps; ++step) {
                 const float dt = frameDt / static_cast<float>(substeps);

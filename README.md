@@ -66,6 +66,12 @@ starts and stops a take, saved to `takes/` with your camera path and the game's
 timing. `tools/render-takes.sh` renders every new take in 4K with music and
 sound. Press ? for the controls on screen.
 
+The live game plays its music and sound effects too, from a sound bank of WAVs
+made with the same synth. Build it once with
+`uv run --project ../supertune python tools/soundbank.py`, which writes
+`sounds/`. Audio goes through [miniaudio](https://miniaud.io), vendored in
+`third_party/`.
+
 Game recordings also write `out.cues` with when the music plays and stops and every game event.
 `uv run --project ../supertune python tools/music.py out.mp4` scores the clip
 with toy-instrument versions of the Can-can and In the Hall of the Mountain
@@ -120,6 +126,8 @@ prints who got hit and knocked off each round: `./build/chairs_sim --seed 56 -v`
 | `tools/sim.cpp` | headless game runner |
 | `tools/music.py` | scores game recordings from their cues |
 | `tools/render-takes.sh` | renders saved takes in 4K |
+| `tools/soundbank.py` | renders the music loops and effects the live game plays |
+| `src/audio.*` | live music and sound effects |
 | `src/take.*` | saving, loading and sampling camera takes |
 | `src/brain.*` | observations, actions and the policy network for trained gens |
 | `src/env.cpp` | the batched training environment, as a C library |

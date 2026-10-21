@@ -12,3 +12,4 @@ __pycache__/
 train/log.csv
 train/chairs_sim
 train/judge.out
+sounds/

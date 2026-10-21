@@ -13,8 +13,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(SKEIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../skein" CACHE PATH "Path to a Skein checkout")
 add_subdirectory(${SKEIN_DIR} skein)
 
-add_library(chairs_world STATIC src/kit.cpp src/meadow.cpp src/stage.cpp src/shots.cpp src/game.cpp src/bots.cpp src/fx.cpp src/view.cpp src/take.cpp src/brain.cpp)
+add_library(chairs_world STATIC src/kit.cpp src/meadow.cpp src/stage.cpp src/shots.cpp src/game.cpp src/bots.cpp src/fx.cpp src/view.cpp src/take.cpp src/brain.cpp src/audio.cpp)
 target_include_directories(chairs_world PUBLIC src)
+target_include_directories(chairs_world PRIVATE third_party/miniaudio)
 target_link_libraries(chairs_world PUBLIC skein)
 target_compile_options(chairs_world PRIVATE -Wall -Wextra -Wno-unused-parameter)
 
