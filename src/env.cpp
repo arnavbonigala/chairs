@@ -1,6 +1,8 @@
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "bots.hpp"
@@ -33,7 +35,8 @@ struct Batch {
     std::vector<Slot> slots;
     std::vector<Stats> stats;
     std::unique_ptr<JobSystem> jobs;
-    std::vector<std::unique_ptr<brain::Policy>> pool;
+    std::map<std::string, std::unique_ptr<brain::Policy>> loaded;
+    std::vector<const brain::Policy*> pool;
     float poolShare = 0.0f;
     bool poolBots = false;
 
@@ -106,10 +109,18 @@ void chairs_env_free(void* h) { delete static_cast<Batch*>(h); }
 void chairs_env_set_fouls(void* h, int fouls) { static_cast<Batch*>(h)->fouls = fouls != 0; }
 
 int chairs_env_add_opponent(void* h, const char* path) {
-    auto policy = std::make_unique<brain::Policy>();
-    std::string error;
-    if (!policy->load(path, error)) return 0;
-    static_cast<Batch*>(h)->pool.push_back(std::move(policy));
+    auto* b = static_cast<Batch*>(h);
+    auto& slot = b->loaded[path];
+    if (!slot) {
+        auto policy = std::make_unique<brain::Policy>();
+        std::string error;
+        if (!policy->load(path, error)) {
+            b->loaded.erase(path);
+            return 0;
+        }
+        slot = std::move(policy);
+    }
+    b->pool.push_back(slot.get());
     return 1;
 }
 
