@@ -1,0 +1,13 @@
+{
+ "gen": 76,
+ "update": 6700,
+ "samples": 320045898,
+ "fouls": true,
+ "rounds_per_game": 4.923,
+ "fill": 0.984,
+ "sits_per_round": 4.011,
+ "knocks_per_round": 0.42,
+ "pool_win_rate": 0.75,
+ "fouls_per_game": 0.352,
+ "saved": "2026-10-20 21:18:29"
+}

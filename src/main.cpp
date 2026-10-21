@@ -227,7 +227,7 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--no-tags")) orbit.tags = false;
         else if (!std::strcmp(argv[i], "--game")) playGame = true;
         else if (!std::strcmp(argv[i], "--players") && i + 1 < argc) players = std::atoi(argv[++i]);
-        else if (!std::strcmp(argv[i], "--gen") && i + 1 < argc) gen = std::atoi(argv[++i]);
+        else if (!std::strcmp(argv[i], "--gen") && i + 1 < argc) gen = brain::parseGen(argv[++i]);
         else if (!std::strcmp(argv[i], "--replay") && i + 1 < argc) {
             if (!replay.load(argv[++i])) {
                 std::fprintf(stderr, "can't read take %s\n", argv[i]);

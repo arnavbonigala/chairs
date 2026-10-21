@@ -45,8 +45,8 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--games") && i + 1 < argc) games = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "--seed") && i + 1 < argc) seed = std::strtoull(argv[++i], nullptr, 10);
         else if (!std::strcmp(argv[i], "--cast") && i + 1 < argc) cast = argv[++i];
-        else if (!std::strcmp(argv[i], "--gen") && i + 1 < argc) gen = std::atoi(argv[++i]);
-        else if (!std::strcmp(argv[i], "--vs") && i + 1 < argc) vs = std::atoi(argv[++i]);
+        else if (!std::strcmp(argv[i], "--gen") && i + 1 < argc) gen = brain::parseGen(argv[++i]);
+        else if (!std::strcmp(argv[i], "--vs") && i + 1 < argc) vs = brain::parseGen(argv[++i]);
         else if (!std::strcmp(argv[i], "-v")) verbose = true;
         else if (!std::strcmp(argv[i], "-q")) quiet = true;
     }

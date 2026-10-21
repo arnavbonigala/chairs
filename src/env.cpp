@@ -113,6 +113,8 @@ int chairs_env_add_opponent(void* h, const char* path) {
     return 1;
 }
 
+void chairs_env_clear_pool(void* h) { static_cast<Batch*>(h)->pool.clear(); }
+
 void chairs_env_set_pool(void* h, float share, int bots) {
     auto* b = static_cast<Batch*>(h);
     b->poolShare = share;

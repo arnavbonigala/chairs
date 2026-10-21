@@ -67,6 +67,8 @@ def main():
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--lr", type=float, default=3e-4)
     p.add_argument("--pool-share", type=float, default=0.5)
+    p.add_argument("--pool-recent", type=int, default=12)
+    p.add_argument("--entropy", type=float, default=0.01)
     p.add_argument("--resume", action="store_true")
     args = p.parse_args()
 
@@ -82,12 +84,21 @@ def main():
         agent.load_state_dict(ck["agent"])
         opt.load_state_dict(ck["opt"])
         update, samples, gen, fouls = ck["update"], ck["samples"], ck["gen"], ck["fouls"]
+        for group in opt.param_groups:
+            group["lr"] = args.lr
         env = Env(args.envs, seed=args.seed + update, fouls=fouls)
 
     def open_pool():
-        for path in sorted(GENS.glob("gen*.json"), key=lambda q: int(q.stem[3:])):
-            if json.loads(path.read_text()).get("fouls"):
-                env.add_opponent(path.with_suffix(".bin"))
+        env.clear_pool()
+        ruled = [q for q in sorted(GENS.glob("gen*.json"), key=lambda q: int(q.stem[3:])) if json.loads(q.read_text()).get("fouls")]
+        picks = ruled[-args.pool_recent:]
+        best = GENS / "best.json"
+        if best.exists():
+            champ = GENS / f"gen{json.loads(best.read_text())['gen']}.json"
+            if champ.exists() and champ not in picks:
+                picks.append(champ)
+        for q in picks:
+            env.add_opponent(q.with_suffix(".bin"))
         env.set_pool(args.pool_share, True)
 
     if fouls:
@@ -150,7 +161,7 @@ def main():
                 a_ = (a_ - a_.mean()) / (a_.std() + 1e-8)
                 pg = -torch.min(ratio * a_, ratio.clamp(1 - clip, 1 + clip) * a_).mean()
                 vl = 0.5 * (v - b_ret[idx]).pow(2).mean()
-                loss = pg + 0.5 * vl - 0.01 * ent.mean()
+                loss = pg + 0.5 * vl - args.entropy * ent.mean()
                 opt.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), 0.5)
@@ -186,7 +197,7 @@ def main():
                 "knocks_per_round": round(s["knocks"] / r, 3), "pool_win_rate": round(s["pool_wins"] / max(s["pool_games"], 1), 3), "fouls_per_game": round(s["fouls"] / g, 3),
                 "saved": time.strftime("%Y-%m-%d %H:%M:%S")}, indent=1) + "\n")
             if fouls:
-                env.add_opponent(GENS / f"gen{gen}.bin")
+                open_pool()
             torch.save({"agent": agent.state_dict(), "opt": opt.state_dict(), "update": update, "samples": samples,
                         "gen": gen, "fouls": fouls}, CHECKPOINT)
             print(f"saved gen{gen}", flush=True)

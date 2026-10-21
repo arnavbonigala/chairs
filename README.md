@@ -90,6 +90,11 @@ the chairs. Each saved generation goes to `gens/genN.bin` with a `genN.json`
 next to it recording its rules and stats. Gens come every 25 updates at first,
 and the gap doubles every 20 gens.
 
+`train/judge.py` plays every new gen against the current champion over 300
+ten-bean games, and a gen takes the crown with 55% of the wins. The champion is
+kept in `gens/best.json` and the app opens it with `--gen best`. The pool of
+frozen opponents is the champion, the 12 newest gens and the scripted bots.
+
 ```
 cmake --build build -j
 cd train && uv run python train.py            # --resume picks up from train/checkpoint.pt

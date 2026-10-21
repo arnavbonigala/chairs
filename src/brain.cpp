@@ -125,6 +125,19 @@ Input act(const Game& game, int self, int move, bool jump, bool shove) {
     return in;
 }
 
+int parseGen(const char* text) {
+    if (std::strcmp(text, "best")) return std::atoi(text);
+    const char* env = std::getenv("CHAIRS_GENS");
+    FILE* f = std::fopen((std::string(env ? env : "gens") + "/best.json").c_str(), "r");
+    if (!f) return 0;
+    char buf[256] = {0};
+    const size_t n = std::fread(buf, 1, sizeof(buf) - 1, f);
+    buf[n] = 0;
+    std::fclose(f);
+    const char* k = std::strstr(buf, "\"gen\"");
+    return k ? std::atoi(std::strchr(k, ':') + 1) : 0;
+}
+
 bool loadGen(int gen, Policy& policy, bool& fouls, std::string& error) {
     const char* env = std::getenv("CHAIRS_GENS");
     const std::string base = std::string(env ? env : "gens") + "/gen" + std::to_string(gen);
