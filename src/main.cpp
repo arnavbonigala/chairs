@@ -145,11 +145,6 @@ void style(Renderer& renderer, const Palette& p) {
 
 }  // namespace
 
-std::string slowPath(const std::string& path) {
-    const size_t dot = path.find_last_of('.');
-    return dot == std::string::npos ? path + "-slowmo" : path.substr(0, dot) + "-slowmo" + path.substr(dot);
-}
-
 int main(int argc, char** argv) {
     int width = 0, height = 0, frames = 0, beans = 8;
     uint32_t seed = 3;
@@ -312,11 +307,8 @@ int main(int argc, char** argv) {
 
     int w = width, h = height;
     if (w <= 0 || h <= 0) glfwGetFramebufferSize(window, &w, &h);
-    VideoRecorder recorder, slowRecorder;
+    VideoRecorder recorder;
     if (record && !recorder.open(record, w, h, 60, error)) std::fprintf(stderr, "record: %s\n", error.c_str());
-    if (record && stage && substeps > 1 && !slowRecorder.open(slowPath(record), w, h, 60, error))
-        std::fprintf(stderr, "record: %s\n", error.c_str());
-    int slowIndex = 0;
 
     std::vector<float> shown;
     double last = glfwGetTime();
@@ -346,21 +338,7 @@ int main(int argc, char** argv) {
 
             const bool wanted = !game || recordRounds.empty() ||
                                 std::find(recordRounds.begin(), recordRounds.end(), game->round) != recordRounds.end();
-            const bool realtime = step == substeps - 1 && wanted;
-            if (game && record) {
-                const bool want = view->slowWindow() && wanted;
-                if (want && !slowRecorder.recording()) {
-                    std::string path = slowPath(record);
-                    const size_t dot = path.find_last_of('.');
-                    path.insert(dot == std::string::npos ? path.size() : dot, "-" + std::to_string(++slowIndex));
-                    if (!slowRecorder.open(path, w, h, 60, error)) std::fprintf(stderr, "record: %s\n", error.c_str());
-                } else if (!want && slowRecorder.recording()) {
-                    slowRecorder.close();
-                }
-            }
-            const bool slow = slowRecorder.recording() &&
-                              (game || (stage->time >= stage->script.slowFrom && stage->time < stage->script.slowTo));
-            if (!realtime && !slow) continue;
+            if (step != substeps - 1 || !wanted) continue;
 
             int windowWidth = 0, windowHeight = 0;
             glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
@@ -402,8 +380,7 @@ int main(int argc, char** argv) {
             }
             overlay.flush(renderer.outputFramebuffer(), w, h);
 
-            if (realtime) recorder.capture(renderer.outputFramebuffer());
-            if (slow) slowRecorder.capture(renderer.outputFramebuffer());
+            recorder.capture(renderer.outputFramebuffer());
             renderer.present(windowWidth, windowHeight);
             glfwSwapBuffers(window);
         }
@@ -412,7 +389,6 @@ int main(int argc, char** argv) {
     if (stage && stage->loser >= 0)
         std::printf("loser %s\n", Meadow::beanName(meadow.beans[stage->players[static_cast<size_t>(stage->loser)].bean].id));
     recorder.close();
-    slowRecorder.close();
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;

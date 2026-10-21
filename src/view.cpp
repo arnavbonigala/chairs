@@ -48,16 +48,6 @@ void GameView::layout() {
     round_ = game_.round;
 }
 
-bool GameView::slowWindow() const {
-    switch (game_.phase) {
-        case Game::Music: return game_.phaseTime >= game_.stopAt - 0.4f;
-        case Game::Scramble: return true;
-        case Game::Results: return game_.phaseTime < 1.9f;
-        case Game::Over: return overTime_ < 3.0f;
-    }
-    return false;
-}
-
 void GameView::sync(float dt) {
     if (game_.round != round_) layout();
     for (Prop& p : props_) {

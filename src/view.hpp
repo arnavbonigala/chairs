@@ -16,7 +16,6 @@ public:
     GameView(Meadow& meadow, Game& game);
     void sync(float dt);
     bool camera(const std::string& shot, int focus, CameraKey& out);
-    bool slowWindow() const;
     float overTime() const { return overTime_; }
 
 private:

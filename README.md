@@ -55,10 +55,6 @@ cmake --build build -j
 | `--rounds 1,5` | record only those rounds |
 | `--empty N` | N chairs and no beans, for the empty-chair shots (`--shot empty-wide`, `empty-push`, `empty-orbit`, `empty-crane`, `empty-chair`) |
 
-Recording runs four simulation steps per frame. Alongside `out.mp4`, scenes write
-`out-slowmo.mp4` at quarter speed, and games write `out-slowmo-N.mp4` for each
-scramble.
-
 `chairs_sim` plays games headless at about half a million steps a second and
 prints who got hit and knocked off each round: `./build/chairs_sim --seed 56 -v`.
 

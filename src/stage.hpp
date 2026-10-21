@@ -36,8 +36,6 @@ struct Routine {
     float stopAt = 6.0f;
     float clearAt = 0.0f;
     float length = 12.0f;
-    float slowFrom = 0.0f;
-    float slowTo = 0.0f;
     bool final = false;
     int doomed = -1;
 };

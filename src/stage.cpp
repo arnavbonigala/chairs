@@ -11,8 +11,8 @@ namespace {
 
 const std::vector<std::pair<std::string, Routine>>& scripts() {
     static const std::vector<std::pair<std::string, Routine>> all = {
-        {"round", Routine{{0, 7, 4, 1, 11, 99}, {0.14f, 0.2f, 0.12f, 0.24f, 0.18f, 0.7f}, 5, 6.0f, 12.0f, 14.5f, 5.7f, 11.2f, false, 5}},
-        {"final", Routine{{4, 11}, {0.2f, 0.16f}, 1, 5.0f, 0.0f, 12.0f, 4.7f, 10.0f, true, 1}},
+        {"round", Routine{{0, 7, 4, 1, 11, 99}, {0.14f, 0.2f, 0.12f, 0.24f, 0.18f, 0.7f}, 5, 6.0f, 12.0f, 14.5f, false, 5}},
+        {"final", Routine{{4, 11}, {0.2f, 0.16f}, 1, 5.0f, 0.0f, 12.0f, true, 1}},
     };
     return all;
 }
