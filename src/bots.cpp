@@ -69,7 +69,7 @@ Input Bot::think(const Game& game, int self, Random& r) {
     if (game.phase == Game::Music || game.phase == Game::Results) {
         const Vec3 radial = p * (1.0f / r0);
         const Vec3 tangent{radial.z, 0, -radial.x};
-        const float want = game.ring + 1.5f + 0.25f * std::sin(game.time * 0.7f + wobble);
+        const float want = game.ring + game.rules.ringMargin + 0.95f + 0.25f * std::sin(game.time * 0.7f + wobble);
         const Vec3 move = tangent * pace + radial * std::clamp((want - r0) * 1.5f, -0.6f, 0.6f);
         in.moveX = move.x;
         in.moveZ = move.z;

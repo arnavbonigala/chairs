@@ -251,10 +251,10 @@ int main(int argc, char** argv) {
         }
     }
     brain::Policy policy;
-    bool genFouls = true;
+    brain::GenInfo genInfo;
     if (gen > 0) {
         std::string error;
-        if (!loadGen(gen, policy, genFouls, error)) {
+        if (!loadGen(gen, policy, genInfo, error)) {
             std::fprintf(stderr, "%s\n", error.c_str());
             return 1;
         }
@@ -360,8 +360,8 @@ int main(int argc, char** argv) {
     Random botRandom(seed * 1000 + 1);
     int focus = 0;
     if (playGame) {
-        Rules rules;
-        rules.ringFoul = rules.stallFoul = !gen0 && genFouls;
+        Rules rules = rulesFor(gen > 0 ? genInfo.rules : 1);
+        rules.ringFoul = rules.stallFoul = !gen0 && genInfo.fouls;
         game = std::make_unique<Game>(castIds, seed, rules);
         view = std::make_unique<GameView>(meadow, *game);
         renderer.particles = {&view->fx.confetti, &view->fx.sparks};

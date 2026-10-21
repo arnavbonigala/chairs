@@ -30,6 +30,7 @@ struct Stats {
 struct Batch {
     int count = 0, minPlayers = 2, maxPlayers = 10;
     bool fouls = true;
+    int version = 1;
     uint64_t seed = 1;
     uint64_t next = 0;
     std::vector<Slot> slots;
@@ -52,7 +53,7 @@ struct Batch {
             for (int x : ids) dup |= x == id;
             if (!dup) ids.push_back(id);
         }
-        Rules rules;
+        Rules rules = rulesFor(version);
         rules.ringFoul = rules.stallFoul = fouls;
         s.game = std::make_unique<Game>(ids, gameSeed, rules);
         s.inputs.assign(static_cast<size_t>(s.players), Input{});
@@ -123,6 +124,8 @@ int chairs_env_add_opponent(void* h, const char* path) {
     b->pool.push_back(slot.get());
     return 1;
 }
+
+void chairs_env_set_rules(void* h, int version) { static_cast<Batch*>(h)->version = version; }
 
 void chairs_env_clear_pool(void* h) { static_cast<Batch*>(h)->pool.clear(); }
 

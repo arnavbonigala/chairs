@@ -19,6 +19,8 @@ class Env:
         lib.chairs_env_add_opponent.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
         lib.chairs_env_set_pool.restype = None
         lib.chairs_env_clear_pool.restype = None
+        lib.chairs_env_set_rules.restype = None
+        lib.chairs_env_set_rules.argtypes = [ctypes.c_void_p, ctypes.c_int]
         lib.chairs_env_clear_pool.argtypes = [ctypes.c_void_p]
         lib.chairs_env_set_pool.argtypes = [ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
         self.lib = lib
@@ -26,6 +28,7 @@ class Env:
         self.logits = lib.chairs_logits()
         self.moves = lib.chairs_moves()
         self.count, self.agents = count, max_players
+        self.n = count * max_players
         self.handle = ctypes.c_void_p(lib.chairs_env_new(count, min_players, max_players, seed, int(fouls), threads))
         n = count * max_players
         self.obs = np.zeros((n, self.obs_size), np.float32)
@@ -58,6 +61,9 @@ class Env:
     def add_opponent(self, path):
         return bool(self.lib.chairs_env_add_opponent(self.handle, str(path).encode()))
 
+    def set_rules(self, version):
+        self.lib.chairs_env_set_rules(self.handle, version)
+
     def clear_pool(self):
         self.lib.chairs_env_clear_pool(self.handle)
 
@@ -67,3 +73,32 @@ class Env:
     def __del__(self):
         if getattr(self, "handle", None):
             self.lib.chairs_env_free(self.handle)
+
+
+class Group:
+    def __init__(self, envs):
+        self.envs = envs
+        self.obs_size, self.logits, self.moves = envs[0].obs_size, envs[0].logits, envs[0].moves
+        self.n = sum(e.n for e in envs)
+        self.cuts = np.cumsum([0] + [e.n for e in envs])
+
+    def _join(self, parts):
+        return [np.concatenate(p) for p in zip(*parts)]
+
+    def observe(self):
+        return self._join([e.observe() for e in self.envs])
+
+    def step(self, actions):
+        return self._join([e.step(actions[a:b]) for e, a, b in zip(self.envs, self.cuts[:-1], self.cuts[1:])])
+
+    def stats(self):
+        out = {}
+        for e in self.envs:
+            for k, v in e.stats().items():
+                out[k] = out.get(k, 0.0) + v
+        return out
+
+    def __getattr__(self, name):
+        def each(*args):
+            return [getattr(e, name)(*args) for e in self.envs][0]
+        return each

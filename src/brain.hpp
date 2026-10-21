@@ -20,7 +20,11 @@ void observe(const Game& game, int self, float* out);
 Input act(const Game& game, int self, int move, bool jump, bool shove);
 
 class Policy;
-bool loadGen(int gen, Policy& policy, bool& fouls, std::string& error);
+struct GenInfo {
+    bool fouls = true;
+    int rules = 1;
+};
+bool loadGen(int gen, Policy& policy, GenInfo& info, std::string& error);
 int parseGen(const char* text);
 
 class Policy {

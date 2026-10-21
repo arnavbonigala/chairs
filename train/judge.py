@@ -34,6 +34,14 @@ def main():
             time.sleep(60)
             continue
         g = pending[0]
+        rules = json.loads((GENS / f"gen{g}.json").read_text()).get("rules", 1)
+        if rules != state.get("rules", 1):
+            state.setdefault("eras", {})[str(state.get("rules", 1))] = state["gen"]
+            state.update(gen=g, judged=g, rules=rules)
+            state["history"].append({"gen": g, "note": f"first gen on rules {rules}"})
+            BEST.write_text(json.dumps(state, indent=1) + "\n")
+            print(time.strftime("%H:%M:%S"), f"gen {g} opens rules {rules}; rules {rules - 1} champion was gen {state['eras'][str(rules - 1)]}", flush=True)
+            continue
         wins, champ = match(g, state["gen"])
         share = wins / max(wins + champ, 1)
         bots, botsl = match(g, -1)

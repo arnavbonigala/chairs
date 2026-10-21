@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
     int players = 6, games = 20;
     uint64_t seed = 1;
     bool verbose = false, quiet = false;
-    int gen = -1, vs = -2;
+    int gen = -1, vs = -2, version = 1;
     std::string cast;
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--players") && i + 1 < argc) players = std::atoi(argv[++i]);
@@ -49,15 +49,16 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--vs") && i + 1 < argc) vs = brain::parseGen(argv[++i]);
         else if (!std::strcmp(argv[i], "-v")) verbose = true;
         else if (!std::strcmp(argv[i], "-q")) quiet = true;
+        else if (!std::strcmp(argv[i], "--rules") && i + 1 < argc) version = std::atoi(argv[++i]);
     }
     brain::Policy policies[2];
-    bool genFouls = true, unused = true;
+    brain::GenInfo info, unused;
     std::string error;
-    if ((gen > 0 && !brain::loadGen(gen, policies[0], genFouls, error)) || (vs > 0 && !brain::loadGen(vs, policies[1], unused, error))) {
+    if ((gen > 0 && !brain::loadGen(gen, policies[0], info, error)) || (vs > 0 && !brain::loadGen(vs, policies[1], unused, error))) {
         std::fprintf(stderr, "%s\n", error.c_str());
         return 1;
     }
-    const bool foulsOn = gen == 0 ? false : gen > 0 ? genFouls : true;
+    const bool foulsOn = gen == 0 ? false : gen > 0 ? info.fouls : true;
     auto make = [&](int which, Random& rng) {
         const int g = which == 0 ? gen : vs;
         return g > 0 ? Bot::trained(policies[which]) : g == 0 ? Bot::fresh() : Bot::random(rng);
@@ -68,7 +69,7 @@ int main(int argc, char** argv) {
     for (int g = 0; g < games; ++g) {
         const uint64_t s = seed + static_cast<uint64_t>(g);
         const std::vector<int> ids = parseCast(cast, players, s);
-        Rules rules;
+        Rules rules = rulesFor(gen > 0 ? info.rules : version);
         rules.ringFoul = rules.stallFoul = foulsOn;
         Game game(ids, s, rules);
         Random rng(s * 1000 + 1);

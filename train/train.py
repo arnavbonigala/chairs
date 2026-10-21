@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from env import Env
+from env import Env, Group
 
 ROOT = Path(__file__).resolve().parent.parent
 GENS = ROOT / "gens"
@@ -70,6 +70,8 @@ def main():
     p.add_argument("--pool-recent", type=int, default=12)
     p.add_argument("--entropy", type=float, default=0.01)
     p.add_argument("--resume", action="store_true")
+    p.add_argument("--rules", type=int, default=None)
+    p.add_argument("--big-envs", type=int, default=6)
     args = p.parse_args()
 
     torch.manual_seed(args.seed)
@@ -77,25 +79,33 @@ def main():
     env = Env(args.envs, seed=args.seed, fouls=False)
     agent = Agent(env.obs_size, env.logits, env.moves)
     opt = torch.optim.Adam(agent.parameters(), lr=args.lr, eps=1e-5)
-    update, samples, gen, fouls = 0, 0, 0, False
+    update, samples, gen, fouls, rules = 0, 0, 0, False, 1
     GENS.mkdir(exist_ok=True)
     if args.resume and CHECKPOINT.exists():
         ck = torch.load(CHECKPOINT, weights_only=False)
         agent.load_state_dict(ck["agent"])
         opt.load_state_dict(ck["opt"])
-        update, samples, gen, fouls = ck["update"], ck["samples"], ck["gen"], ck["fouls"]
+        update, samples, gen, fouls, rules = ck["update"], ck["samples"], ck["gen"], ck["fouls"], ck.get("rules", 1)
         for group in opt.param_groups:
             group["lr"] = args.lr
-        env = Env(args.envs, seed=args.seed + update, fouls=fouls)
+    if args.rules is not None:
+        rules = args.rules
+    parts = [Env(args.envs, seed=args.seed + update, fouls=fouls)]
+    if rules >= 2 and args.big_envs > 0:
+        parts.append(Env(args.big_envs, min_players=20, max_players=100, seed=args.seed + update + 777, fouls=fouls))
+    env = Group(parts)
+    env.set_rules(rules)
+    print(f"rules {rules}, {env.n} agent slots", flush=True)
 
     def open_pool():
         env.clear_pool()
-        ruled = [q for q in sorted(GENS.glob("gen*.json"), key=lambda q: int(q.stem[3:])) if json.loads(q.read_text()).get("fouls")]
+        ruled = [q for q in sorted(GENS.glob("gen*.json"), key=lambda q: int(q.stem[3:]))
+                 if json.loads(q.read_text()).get("fouls") and json.loads(q.read_text()).get("rules", 1) == rules]
         picks = ruled[-args.pool_recent:]
         best = GENS / "best.json"
         if best.exists():
             champ = GENS / f"gen{json.loads(best.read_text())['gen']}.json"
-            if champ.exists() and champ not in picks:
+            if champ.exists() and champ not in picks and json.loads(champ.read_text()).get("rules", 1) == rules:
                 picks.append(champ)
         for q in picks:
             env.add_opponent(q.with_suffix(".bin"))
@@ -109,7 +119,7 @@ def main():
                   "seconds_per_game,entropy,value_loss,samples_per_s\n")
 
     gamma, lam, clip, epochs, minibatches = 0.995, 0.95, 0.2, 4, 8
-    T, N = args.steps, env.count * env.agents
+    T, N = args.steps, env.n
     obs_b = torch.zeros(T, N, env.obs_size)
     act_b = torch.zeros(T, N, 3, dtype=torch.long)
     logp_b, val_b, rew_b, done_b, mask_b = (torch.zeros(T, N) for _ in range(5))
@@ -192,14 +202,14 @@ def main():
             next_gen = update + args.gen_every * 2 ** (gen // 20)
             export(agent, GENS / f"gen{gen}.bin")
             (GENS / f"gen{gen}.json").write_text(json.dumps({
-                "gen": gen, "update": update, "samples": samples, "fouls": fouls,
+                "gen": gen, "update": update, "samples": samples, "fouls": fouls, "rules": rules,
                 "rounds_per_game": round(s["finished"] / g, 3), "fill": round(s["finished"] / max(s["most"], 1), 3), "sits_per_round": round(s["sits"] / r, 3),
                 "knocks_per_round": round(s["knocks"] / r, 3), "pool_win_rate": round(s["pool_wins"] / max(s["pool_games"], 1), 3), "fouls_per_game": round(s["fouls"] / g, 3),
                 "saved": time.strftime("%Y-%m-%d %H:%M:%S")}, indent=1) + "\n")
             if fouls:
                 open_pool()
             torch.save({"agent": agent.state_dict(), "opt": opt.state_dict(), "update": update, "samples": samples,
-                        "gen": gen, "fouls": fouls}, CHECKPOINT)
+                        "gen": gen, "fouls": fouls, "rules": rules}, CHECKPOINT)
             print(f"saved gen{gen}", flush=True)
 
 

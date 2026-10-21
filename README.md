@@ -91,6 +91,14 @@ round is worth +1, elimination -1 and the win +2.
 Half the games mix in frozen opponents: an older gen from the fouls era or the
 scripted bots, so a gen has to beat every style it has seen and not just itself.
 
+Rules are versioned. Rules 1 put the foul line 0.55 m in front of the chairs,
+inside the 1.0 m sit zone, and the beans learned to stand in that gap and sit the
+instant the music stopped. Rules 2 move the line to 1.5 m, start the walk at
+2.0 m and measure stalling as walking speed so a 100-bean ring is playable. Each
+gen records its rules and always plays under them. From rules 2 on, training
+also runs a few 20 to 100 bean games, and each ruleset gets its own champion
+line in `gens/best.json`.
+
 Training starts with fouls off and turns them on once the beans fill most of
 the chairs. Each saved generation goes to `gens/genN.bin` with a `genN.json`
 next to it recording its rules and stats. Gens come every 25 updates at first,

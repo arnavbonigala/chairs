@@ -138,20 +138,21 @@ int parseGen(const char* text) {
     return k ? std::atoi(std::strchr(k, ':') + 1) : 0;
 }
 
-bool loadGen(int gen, Policy& policy, bool& fouls, std::string& error) {
+bool loadGen(int gen, Policy& policy, GenInfo& info, std::string& error) {
     const char* env = std::getenv("CHAIRS_GENS");
     const std::string base = std::string(env ? env : "gens") + "/gen" + std::to_string(gen);
     if (!policy.load(base + ".bin", error)) {
         error = "gen " + std::to_string(gen) + " isn't saved (" + error + ")";
         return false;
     }
-    fouls = true;
+    info = GenInfo{};
     if (FILE* f = std::fopen((base + ".json").c_str(), "r")) {
-        char text[4096];
+        char text[8192];
         const size_t n = std::fread(text, 1, sizeof(text) - 1, f);
         text[n] = 0;
         std::fclose(f);
-        if (const char* k = std::strstr(text, "\"fouls\"")) fouls = std::strstr(k, "true") && std::strstr(k, "true") < std::strchr(k, ',');
+        if (const char* k = std::strstr(text, "\"fouls\"")) info.fouls = !std::strncmp(k + 8 + std::strspn(k + 8, " :"), "true", 4);
+        if (const char* k = std::strstr(text, "\"rules\"")) info.rules = std::atoi(k + 8 + std::strspn(k + 8, " :"));
     }
     return true;
 }

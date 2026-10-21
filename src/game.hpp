@@ -32,7 +32,12 @@ struct Rules {
     float stallTime = 2.0f;
     bool ringFoul = true;
     bool stallFoul = true;
+    float walkOffset = 1.6f;
+    bool linearStall = false;
+    int version = 1;
 };
+
+Rules rulesFor(int version);
 
 struct Input {
     float moveX = 0;

@@ -59,6 +59,18 @@ int Game::aliveCount() const {
     return n;
 }
 
+Rules rulesFor(int version) {
+    Rules r;
+    if (version >= 2) {
+        r.version = 2;
+        r.ringMargin = 1.5f;
+        r.walkOffset = 2.0f;
+        r.linearStall = true;
+        r.stallSpeed = 0.6f;
+    }
+    return r;
+}
+
 void Game::layoutChairs(int count) {
     for (Chair& c : chairs) {
         scene_.destroy(c.seat);
@@ -100,7 +112,7 @@ void Game::startRound() {
     phase = Music;
     phaseTime = 0;
     stopAt = random_.uniform(rules.stopMin, rules.stopMax);
-    const float walk = ring + 1.6f;
+    const float walk = ring + rules.walkOffset;
     int k = 0;
     const int alive = aliveCount();
     const float offset = random_.uniform(0.0f, 2.0f * PI);
@@ -264,7 +276,7 @@ void Game::step(const std::vector<Input>& inputs) {
             }
             if (rules.stallFoul && !inGrace() && r > 1e-3f) {
                 const Vec3 tangent{p.z / r, 0, -p.x / r};
-                const float around = dot(flat(c.velocity), tangent) / std::max(r, 1.0f);
+                const float around = dot(flat(c.velocity), tangent) / (rules.linearStall ? 1.0f : std::max(r, 1.0f));
                 c.stall = around < rules.stallSpeed ? c.stall + dt_ : 0.0f;
                 if (c.stall > rules.stallTime) eliminate(static_cast<int>(i), Event::Foul);
             }
