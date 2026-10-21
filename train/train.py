@@ -66,6 +66,7 @@ def main():
     p.add_argument("--updates", type=int, default=100000)
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--lr", type=float, default=3e-4)
+    p.add_argument("--pool-share", type=float, default=0.5)
     p.add_argument("--resume", action="store_true")
     args = p.parse_args()
 
@@ -82,6 +83,15 @@ def main():
         opt.load_state_dict(ck["opt"])
         update, samples, gen, fouls = ck["update"], ck["samples"], ck["gen"], ck["fouls"]
         env = Env(args.envs, seed=args.seed + update, fouls=fouls)
+
+    def open_pool():
+        for path in sorted(GENS.glob("gen*.json"), key=lambda q: int(q.stem[3:])):
+            if json.loads(path.read_text()).get("fouls"):
+                env.add_opponent(path.with_suffix(".bin"))
+        env.set_pool(args.pool_share, True)
+
+    if fouls:
+        open_pool()
     log = open(ROOT / "train" / "log.csv", "a")
     if log.tell() == 0:
         log.write("update,samples,gen,fouls,games,rounds_per_game,sits_per_round,hits_per_round,knocks_per_round,fouls_per_game,"
@@ -95,7 +105,7 @@ def main():
     obs, mask = env.observe()
     obs_t, mask_t = torch.from_numpy(obs.copy()), torch.from_numpy(mask.astype(np.float32))
 
-    window = dict.fromkeys(("games", "rounds", "sits", "hits", "knocks", "fouls", "seconds", "finished", "most"), 0.0)
+    window = dict.fromkeys(("games", "rounds", "sits", "hits", "knocks", "fouls", "seconds", "finished", "most", "pool_games", "pool_wins"), 0.0)
     since = dict(window)
     next_gen = update + args.gen_every * 2 ** (gen // 20)
     while update < args.updates:
@@ -103,6 +113,7 @@ def main():
         if not fouls and (update >= args.fouls_at or fill >= args.fouls_fill):
             fouls = True
             env.set_fouls(True)
+            open_pool()
             print(f"fouls on at update {update}", flush=True)
         t0 = time.time()
         with torch.no_grad():
@@ -161,7 +172,7 @@ def main():
             window = dict.fromkeys(window, 0.0)
             print(f"update {update} fill {s['finished'] / max(s['most'], 1):.2f} samples {samples / 1e6:.1f}M fouls {int(fouls)} rounds/game {s['finished'] / g:.2f} "
                   f"sits/round {s['sits'] / r:.2f} knocks/round {s['knocks'] / r:.2f} fouls/game {s['fouls'] / g:.2f} "
-                  f"entropy {np.mean(ents):.3f} {rate / 1e3:.0f}k/s", flush=True)
+                  f"pool wins {s['pool_wins'] / max(s['pool_games'], 1):.2f} entropy {np.mean(ents):.3f} {rate / 1e3:.0f}k/s", flush=True)
         if update >= next_gen:
             s = since
             g, r = max(s["games"], 1), max(s["rounds"], 1)
@@ -172,8 +183,10 @@ def main():
             (GENS / f"gen{gen}.json").write_text(json.dumps({
                 "gen": gen, "update": update, "samples": samples, "fouls": fouls,
                 "rounds_per_game": round(s["finished"] / g, 3), "fill": round(s["finished"] / max(s["most"], 1), 3), "sits_per_round": round(s["sits"] / r, 3),
-                "knocks_per_round": round(s["knocks"] / r, 3), "fouls_per_game": round(s["fouls"] / g, 3),
+                "knocks_per_round": round(s["knocks"] / r, 3), "pool_win_rate": round(s["pool_wins"] / max(s["pool_games"], 1), 3), "fouls_per_game": round(s["fouls"] / g, 3),
                 "saved": time.strftime("%Y-%m-%d %H:%M:%S")}, indent=1) + "\n")
+            if fouls:
+                env.add_opponent(GENS / f"gen{gen}.bin")
             torch.save({"agent": agent.state_dict(), "opt": opt.state_dict(), "update": update, "samples": samples,
                         "gen": gen, "fouls": fouls}, CHECKPOINT)
             print(f"saved gen{gen}", flush=True)

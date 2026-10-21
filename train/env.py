@@ -16,6 +16,9 @@ class Env:
             getattr(lib, name).restype = None
         lib.chairs_env_free.argtypes = [ctypes.c_void_p]
         lib.chairs_env_set_fouls.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        lib.chairs_env_add_opponent.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        lib.chairs_env_set_pool.restype = None
+        lib.chairs_env_set_pool.argtypes = [ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
         self.lib = lib
         self.obs_size = lib.chairs_obs_size()
         self.logits = lib.chairs_logits()
@@ -46,9 +49,15 @@ class Env:
         self.lib.chairs_env_set_fouls(self.handle, int(on))
 
     def stats(self):
-        out = np.zeros(9, np.float64)
+        out = np.zeros(11, np.float64)
         self.lib.chairs_env_stats(self.handle, self._p(out))
-        return dict(zip(("games", "rounds", "sits", "hits", "knocks", "fouls", "seconds", "finished", "most"), out))
+        return dict(zip(("games", "rounds", "sits", "hits", "knocks", "fouls", "seconds", "finished", "most", "pool_games", "pool_wins"), out))
+
+    def add_opponent(self, path):
+        return bool(self.lib.chairs_env_add_opponent(self.handle, str(path).encode()))
+
+    def set_pool(self, share, bots=True):
+        self.lib.chairs_env_set_pool(self.handle, share, int(bots))
 
     def __del__(self):
         if getattr(self, "handle", None):

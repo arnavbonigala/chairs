@@ -82,6 +82,9 @@ nearest chairs in a frame that turns with it around the ring. It picks a move
 direction, whether to jump and whether to shove, 30 times a second. Surviving a
 round is worth +1, elimination -1 and the win +2.
 
+Half the games mix in frozen opponents: an older gen from the fouls era or the
+scripted bots, so a gen has to beat every style it has seen and not just itself.
+
 Training starts with fouls off and turns them on once the beans fill most of
 the chairs. Each saved generation goes to `gens/genN.bin` with a `genN.json`
 next to it recording its rules and stats. Gens come every 25 updates at first,
