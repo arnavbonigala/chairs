@@ -20,6 +20,8 @@ class Env:
         lib.chairs_env_set_pool.restype = None
         lib.chairs_env_clear_pool.restype = None
         lib.chairs_env_set_rules.restype = None
+        lib.chairs_env_set_bot_share.restype = None
+        lib.chairs_env_set_bot_share.argtypes = [ctypes.c_void_p, ctypes.c_float]
         lib.chairs_env_set_rules.argtypes = [ctypes.c_void_p, ctypes.c_int]
         lib.chairs_env_clear_pool.argtypes = [ctypes.c_void_p]
         lib.chairs_env_set_pool.argtypes = [ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
@@ -60,6 +62,9 @@ class Env:
 
     def add_opponent(self, path):
         return bool(self.lib.chairs_env_add_opponent(self.handle, str(path).encode()))
+
+    def set_bot_share(self, share):
+        self.lib.chairs_env_set_bot_share(self.handle, share)
 
     def set_rules(self, version):
         self.lib.chairs_env_set_rules(self.handle, version)

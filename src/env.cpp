@@ -40,6 +40,7 @@ struct Batch {
     std::vector<const brain::Policy*> pool;
     float poolShare = 0.0f;
     bool poolBots = false;
+    float botShare = 0.0f;
 
     void start(int e) {
         Slot& s = slots[static_cast<size_t>(e)];
@@ -63,7 +64,8 @@ struct Batch {
         const int choices = static_cast<int>(pool.size()) + (poolBots ? 1 : 0);
         s.pooled = choices > 0 && s.players >= 2 && r.unit() < poolShare;
         if (!s.pooled) return;
-        const int pick = static_cast<int>(r.below(static_cast<uint32_t>(choices)));
+        const bool bots = poolBots && (pool.empty() || (botShare > 0.0f ? r.unit() < botShare : r.below(static_cast<uint32_t>(choices)) == pool.size()));
+        const int pick = bots ? static_cast<int>(pool.size()) : static_cast<int>(r.below(static_cast<uint32_t>(pool.size())));
         for (int a = 1; a < s.players; a += 2) {
             s.foe[static_cast<size_t>(a)] = 1;
             s.foes[static_cast<size_t>(a)] = pick < static_cast<int>(pool.size()) ? Bot::trained(*pool[static_cast<size_t>(pick)]) : Bot::random(r);
@@ -126,6 +128,8 @@ int chairs_env_add_opponent(void* h, const char* path) {
 }
 
 void chairs_env_set_rules(void* h, int version) { static_cast<Batch*>(h)->version = version; }
+
+void chairs_env_set_bot_share(void* h, float share) { static_cast<Batch*>(h)->botShare = share; }
 
 void chairs_env_clear_pool(void* h) { static_cast<Batch*>(h)->pool.clear(); }
 

@@ -72,6 +72,7 @@ def main():
     p.add_argument("--resume", action="store_true")
     p.add_argument("--rules", type=int, default=None)
     p.add_argument("--big-envs", type=int, default=6)
+    p.add_argument("--bot-share", type=float, default=0.35)
     args = p.parse_args()
 
     torch.manual_seed(args.seed)
@@ -110,6 +111,7 @@ def main():
         for q in picks:
             env.add_opponent(q.with_suffix(".bin"))
         env.set_pool(args.pool_share, True)
+        env.set_bot_share(args.bot_share)
 
     if fouls:
         open_pool()
