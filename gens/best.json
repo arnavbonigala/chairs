@@ -1,6 +1,6 @@
 {
- "gen": 92,
- "judged": 92,
+ "gen": 119,
+ "judged": 119,
  "history": [
   {
    "gen": 67,
@@ -60,6 +60,99 @@
    "gen": 92,
    "beat": 90,
    "share": 0.633
+  },
+  {
+   "gen": 93,
+   "beat": 92,
+   "share": 0.55
+  },
+  {
+   "gen": 95,
+   "beat": 93,
+   "share": 0.617
+  },
+  {
+   "gen": 98,
+   "beat": 95,
+   "share": 0.843
+  },
+  {
+   "gen": 101,
+   "beat": 98,
+   "share": 0.627
+  },
+  {
+   "gen": 102,
+   "note": "first gen on rules 2"
+  },
+  {
+   "gen": 103,
+   "beat": 102,
+   "share": 0.683
+  },
+  {
+   "gen": 104,
+   "beat": 103,
+   "share": 0.753
+  },
+  {
+   "gen": 105,
+   "beat": 104,
+   "share": 0.667
+  },
+  {
+   "gen": 106,
+   "beat": 105,
+   "share": 0.587
+  },
+  {
+   "gen": 109,
+   "beat": 106,
+   "share": 0.583
+  },
+  {
+   "gen": 110,
+   "beat": 109,
+   "share": 0.73
+  },
+  {
+   "gen": 111,
+   "beat": 110,
+   "share": 0.597
+  },
+  {
+   "gen": 112,
+   "beat": 111,
+   "share": 0.753
+  },
+  {
+   "gen": 113,
+   "beat": 112,
+   "share": 0.585
+  },
+  {
+   "gen": 114,
+   "beat": 113,
+   "share": 0.78
+  },
+  {
+   "gen": 116,
+   "beat": 114,
+   "share": 0.837
+  },
+  {
+   "gen": 117,
+   "beat": 116,
+   "share": 0.57
+  },
+  {
+   "gen": 119,
+   "beat": 117,
+   "share": 0.783
   }
- ]
+ ],
+ "eras": {
+  "1": 101
+ },
+ "rules": 2
 }

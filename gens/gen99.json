@@ -1,0 +1,22 @@
+{
+ "gen": 99,
+ "update": 15100,
+ "samples": 685825355,
+ "fouls": true,
+ "rounds_per_game": 4.947,
+ "fill": 0.997,
+ "sits_per_round": 4.035,
+ "knocks_per_round": 0.369,
+ "pool_win_rate": 0.692,
+ "fouls_per_game": 0.172,
+ "saved": "2026-10-21 01:03:58",
+ "vs_best": {
+  "best": 98,
+  "wins": 117,
+  "losses": 183
+ },
+ "vs_bots": {
+  "wins": 290,
+  "losses": 10
+ }
+}
