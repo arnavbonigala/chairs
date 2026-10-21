@@ -9,5 +9,14 @@
  "knocks_per_round": 0.384,
  "pool_win_rate": 0.753,
  "fouls_per_game": 0.31,
- "saved": "2026-10-20 21:44:48"
+ "saved": "2026-10-20 21:44:48",
+ "vs_best": {
+  "best": 78,
+  "wins": 248,
+  "losses": 52
+ },
+ "vs_bots": {
+  "wins": 226,
+  "losses": 74
+ }
 }

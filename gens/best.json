@@ -1,10 +1,45 @@
 {
- "gen": 67,
- "judged": 70,
+ "gen": 85,
+ "judged": 86,
  "history": [
   {
    "gen": 67,
    "note": "round-robin"
+  },
+  {
+   "gen": 77,
+   "beat": 67,
+   "share": 0.607
+  },
+  {
+   "gen": 78,
+   "beat": 77,
+   "share": 0.58
+  },
+  {
+   "gen": 79,
+   "beat": 78,
+   "share": 0.827
+  },
+  {
+   "gen": 80,
+   "beat": 79,
+   "share": 0.697
+  },
+  {
+   "gen": 81,
+   "beat": 80,
+   "share": 0.633
+  },
+  {
+   "gen": 82,
+   "beat": 81,
+   "share": 0.663
+  },
+  {
+   "gen": 85,
+   "beat": 82,
+   "share": 0.65
   }
  ]
 }
