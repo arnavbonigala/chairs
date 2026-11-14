@@ -1,6 +1,6 @@
 # chairs
 
-Musical chairs for beans, built on [Skein](../skein).
+Musical chairs for beans, built on [Skein](https://github.com/arnavbonigala/skein).
 
 The world is a storybook meadow: a dirt clearing ringed by rolling hills, groves
 of round trees and pines, grass and flowers that sway in the wind, and clouds
